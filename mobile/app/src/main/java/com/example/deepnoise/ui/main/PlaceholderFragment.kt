@@ -4,36 +4,37 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Observer
-import androidx.lifecycle.ViewModelProviders
-import com.example.deepnoise.R
+import com.example.deepnoise.databinding.FragmentMainBinding
+import com.example.deepnoise.utils.InjectionUtils
+import com.example.deepnoise.viewmodels.PageViewModel
 
 /**
  * A placeholder fragment containing a simple view.
  */
 class PlaceholderFragment : Fragment() {
 
-    private lateinit var pageViewModel: PageViewModel
+    private val pageViewModel: PageViewModel by viewModels {
+        InjectionUtils.providePageViewModelFactory()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        pageViewModel = ViewModelProviders.of(this).get(PageViewModel::class.java).apply {
-            setIndex(arguments?.getInt(ARG_SECTION_NUMBER) ?: 1)
-        }
+        pageViewModel.setIndex(arguments?.getInt(ARG_SECTION_NUMBER) ?: 1)
     }
 
     override fun onCreateView(
             inflater: LayoutInflater, container: ViewGroup?,
             savedInstanceState: Bundle?
     ): View? {
-        val root = inflater.inflate(R.layout.fragment_main, container, false)
-        val textView: TextView = root.findViewById(R.id.section_label)
+        val binding = FragmentMainBinding.inflate(inflater)
+        val textView = binding.sectionLabel
         pageViewModel.text.observe(viewLifecycleOwner, Observer<String> {
             textView.text = it
         })
-        return root
+        return binding.root
     }
 
     companion object {

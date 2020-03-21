@@ -1,4 +1,4 @@
-package com.example.deepnoise.ui.main
+package com.example.deepnoise.viewmodels
 
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
