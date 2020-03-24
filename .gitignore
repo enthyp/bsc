@@ -1,6 +1,19 @@
 # Nested .gitignores.
 */**/.gitignore
 
+# WebRTC sources.
+webrtc/src/
+
+###
+# PYTHON
+###
+__pycache__/
+
+
+###
+# KOTLIN
+###
+
 # Compiled class file
 *.class
 
