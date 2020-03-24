@@ -8,9 +8,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.example.deepnoise.api.SignalingClient
 import com.example.deepnoise.databinding.ActivityCallBinding
-import kotlinx.android.synthetic.main.activity_call.*
-import org.webrtc.*
 
 class CallActivity : AppCompatActivity() {
 
@@ -25,10 +24,6 @@ class CallActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        val calleeKey = resources.getString(R.string.callee)
-        binding.callee.text = intent.getStringExtra(calleeKey)
-
         checkCameraPermission()
     }
 
@@ -41,7 +36,16 @@ class CallActivity : AppCompatActivity() {
     }
 
     private fun onCameraPermissionGranted() {
-        doStuff()
+        val signalingClient = SignalingClient(
+            {
+                this?.videoTracks?.get(0)?.addSink(binding.remoteView)
+            },
+            application
+        )
+        signalingClient.initSurfaceView(binding.remoteView)
+        signalingClient.initSurfaceView(binding.localView)
+        signalingClient.startLocalVideoCapture(binding.localView)
+        signalingClient.call()
     }
 
     private fun requestCameraPermission(dialogShown: Boolean = false) {
@@ -78,51 +82,5 @@ class CallActivity : AppCompatActivity() {
 
     private fun onCameraPermissionDenied() {
         Toast.makeText(this, "Camera Permission Denied", Toast.LENGTH_LONG).show()
-    }
-
-    private fun doStuff() {
-        // Initialize PeerConnectionFactory options.
-        val options = PeerConnectionFactory.InitializationOptions.builder(this)
-            .setEnableInternalTracer(true)
-            .setFieldTrials("WebRTC-H264HighProfile/Enabled/")
-            .createInitializationOptions()
-        PeerConnectionFactory.initialize(options)
-
-        // Configure the PeerConnectionFactory builder.
-        val rootEglBase: EglBase = EglBase.create()
-        val peerConnectionFactory = PeerConnectionFactory
-            .builder()
-            .setVideoDecoderFactory(DefaultVideoDecoderFactory(rootEglBase.eglBaseContext))
-            .setVideoEncoderFactory(DefaultVideoEncoderFactory(rootEglBase.eglBaseContext, true, true))
-            .setOptions(PeerConnectionFactory.Options().apply {
-                disableEncryption = true
-                disableNetworkMonitor = true
-            })
-            .createPeerConnectionFactory()
-
-        // Setup video view object.
-        val videoViewer = binding.videoView
-        videoViewer.setMirror(true)
-        videoViewer.setEnableHardwareScaler(true)
-        videoViewer.init(rootEglBase.eglBaseContext, null)
-
-        val capturer = Camera2Enumerator(this).run {
-            deviceNames.find {
-                isFrontFacing(it)
-            }?.let {
-                createCapturer(it, null)
-            } ?: throw IllegalStateException()
-        }
-
-        val localVideoSource = peerConnectionFactory.createVideoSource(false)
-
-        val surfaceTextureHelper = SurfaceTextureHelper.create(Thread.currentThread().name, rootEglBase.eglBaseContext)
-        (capturer as VideoCapturer).initialize(surfaceTextureHelper, this, localVideoSource.capturerObserver)
-
-        // width, height, frame per second
-        capturer.startCapture(320, 240, 60)
-
-        val localVideoTrack = peerConnectionFactory.createVideoTrack("101", localVideoSource)
-        localVideoTrack.addSink(video_view)
     }
 }
