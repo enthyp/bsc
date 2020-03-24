@@ -9,15 +9,16 @@ import com.android.volley.toolbox.JsonObjectRequest
 import com.android.volley.toolbox.Volley
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import kotlinx.coroutines.*
 import org.json.JSONObject
 import org.webrtc.*
 
 
-class SignalingClient(addStreamCallback: MediaStream?.() -> Unit, context: Context) {
+class SignalingClient(remoteView: VideoSink, val context: Context) {
+
+    private val TAG = "SignalingClient"
 
     private val requestQueue: RequestQueue by lazy {
-        // applicationContext is key, it keeps you from leaking the
-        // Activity or BroadcastReceiver if someone passes one in.
         Volley.newRequestQueue(context.applicationContext)
     }
 
@@ -31,11 +32,10 @@ class SignalingClient(addStreamCallback: MediaStream?.() -> Unit, context: Conte
         buildPeerConnectionFactory(context)
     }
     private val peerConnection: PeerConnection? by lazy {
-        buildPeerConnection(addStreamCallback)
+        buildPeerConnection(remoteView)
     }
 
     private val rootEglBase: EglBase = EglBase.create()
-
     private val videoCapturer by lazy { getVideoCapturer(context) }
     private val localVideoSource by lazy { peerConnectionFactory.createVideoSource(false) }
 
@@ -60,17 +60,18 @@ class SignalingClient(addStreamCallback: MediaStream?.() -> Unit, context: Conte
             .createPeerConnectionFactory()
     }
 
-    private fun buildPeerConnection(addStreamCallback: MediaStream?.() -> Unit): PeerConnection? {
+    private fun buildPeerConnection(remoteView: VideoSink): PeerConnection? {
         val observer = object : PeerConnectionObserver() {
             override fun onIceCandidate(p0: IceCandidate?) {
                 super.onIceCandidate(p0)
                 send(p0)
-                onIceCandidate(p0)
+                onIceCandidateReceived(p0!!)
             }
 
             override fun onAddStream(p0: MediaStream?) {
                 super.onAddStream(p0)
-                p0.addStreamCallback()
+                Log.d(TAG, "Add stream")
+                p0?.videoTracks?.get(0)?.addSink(remoteView)
             }
         }
 
@@ -102,11 +103,11 @@ class SignalingClient(addStreamCallback: MediaStream?.() -> Unit, context: Conte
         videoCapturer.startCapture(320, 240, 60)
         val localVideoTrack = peerConnectionFactory.createVideoTrack("100", localVideoSource)
         localVideoTrack.addSink(localVideoOutput)
+
         val localStream = peerConnectionFactory.createLocalMediaStream("101")
         localStream.addTrack(localVideoTrack)
         peerConnection?.addStream(localStream)
     }
-
 
     fun call() {
         val constraints = MediaConstraints().apply {
@@ -121,21 +122,45 @@ class SignalingClient(addStreamCallback: MediaStream?.() -> Unit, context: Conte
         }, constraints)
     }
 
+    fun answer() {
+        val constraints = MediaConstraints().apply {
+            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
+        }
+
+        peerConnection?.createAnswer(object : AppSdpObserver() {
+            override fun onCreateSuccess(p0: SessionDescription?) {
+                peerConnection?.setLocalDescription(AppSdpObserver(), p0)
+                send(p0)
+            }
+        }, constraints)
+    }
+
     private fun send(data: Any?) {
         val jsonObj = JSONObject(gson.toJson(data))
         val url = "http://192.168.100.106:5000/echo"
+
         val jsonObjectRequest = JsonObjectRequest(Request.Method.POST, url, jsonObj,
             Response.Listener { response ->
                 val jsonObject = gson.fromJson(response.toString(), JsonObject::class.java)
 
-                if (jsonObject.has("serverUrl")) {
-                    onIceCandidateReceived(gson.fromJson(jsonObject, IceCandidate::class.java))
-                } else {
-                    onAnswer(gson.fromJson(jsonObject, SessionDescription::class.java))
+                GlobalScope.launch(Dispatchers.Main) {
+                    if (jsonObject.has("serverUrl")) {
+                        onIceCandidateReceived(
+                            gson.fromJson(
+                                jsonObject,
+                                IceCandidate::class.java
+                            )
+                        )
+                    } else if (jsonObject.has("type") && jsonObject.get("type").asString == "OFFER") {
+                        onOffer(gson.fromJson(jsonObject, SessionDescription::class.java))
+                    } else if (jsonObject.has("type") && jsonObject.get("type").asString == "ANSWER") {
+                        onAnswer(gson.fromJson(jsonObject, SessionDescription::class.java))
+                    }
                 }
             },
+
             Response.ErrorListener { error ->
-                Log.d("CRAP", error.toString())
+                Log.d(TAG, error.toString())
             }
         )
 
@@ -146,7 +171,13 @@ class SignalingClient(addStreamCallback: MediaStream?.() -> Unit, context: Conte
         peerConnection?.addIceCandidate(iceCandidate)
     }
 
+    private fun onOffer(sessionDescription: SessionDescription) {
+        peerConnection?.setRemoteDescription(AppSdpObserver(), sessionDescription)
+        answer()
+    }
+
     private fun onAnswer(sessionDescription: SessionDescription) {
         peerConnection?.setRemoteDescription(AppSdpObserver(), sessionDescription)
+        Log.d(TAG, "Got answer.")
     }
 }

@@ -24,6 +24,7 @@ class CallActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
         checkCameraPermission()
     }
 
@@ -37,9 +38,7 @@ class CallActivity : AppCompatActivity() {
 
     private fun onCameraPermissionGranted() {
         val signalingClient = SignalingClient(
-            {
-                this?.videoTracks?.get(0)?.addSink(binding.remoteView)
-            },
+            binding.remoteView,
             application
         )
         signalingClient.initSurfaceView(binding.remoteView)
