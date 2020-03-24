@@ -8,7 +8,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.deepnoise.api.SignalingClient
+import com.example.deepnoise.api.RTCClient
 import com.example.deepnoise.databinding.ActivityCallBinding
 
 class CallActivity : AppCompatActivity() {
@@ -37,7 +37,7 @@ class CallActivity : AppCompatActivity() {
     }
 
     private fun onCameraPermissionGranted() {
-        val signalingClient = SignalingClient(
+        val signalingClient = RTCClient(
             binding.remoteView,
             application
         )

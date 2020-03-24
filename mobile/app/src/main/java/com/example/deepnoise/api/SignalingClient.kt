@@ -1,183 +1,90 @@
 package com.example.deepnoise.api
 
-import android.content.Context
 import android.util.Log
-import com.android.volley.Request
-import com.android.volley.RequestQueue
-import com.android.volley.Response
-import com.android.volley.toolbox.JsonObjectRequest
-import com.android.volley.toolbox.Volley
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.features.json.GsonSerializer
+import io.ktor.client.features.json.JsonFeature
+import io.ktor.client.features.websocket.WebSockets
+import io.ktor.client.features.websocket.ws
+import io.ktor.http.cio.websocket.Frame
+import io.ktor.http.cio.websocket.readText
+import io.ktor.util.KtorExperimentalAPI
 import kotlinx.coroutines.*
-import org.json.JSONObject
-import org.webrtc.*
+import kotlinx.coroutines.channels.ConflatedBroadcastChannel
+import org.webrtc.IceCandidate
+import org.webrtc.SessionDescription
 
+@KtorExperimentalAPI
+class SignalingClient(private val listener: SignalingClientListener) : CoroutineScope {
 
-class SignalingClient(remoteView: VideoSink, val context: Context) {
+    companion object {
+        private const val HOST_ADDRESS = "192.168.43.21"
+    }
 
     private val TAG = "SignalingClient"
 
-    private val requestQueue: RequestQueue by lazy {
-        Volley.newRequestQueue(context.applicationContext)
-    }
+    private val job = Job()
 
     private val gson = Gson()
 
-    private val iceServer = listOf(
-        PeerConnection.IceServer.builder("stun:stun.l.google.com:19302")
-            .createIceServer()
-    )
-    private val peerConnectionFactory: PeerConnectionFactory by lazy {
-        buildPeerConnectionFactory(context)
-    }
-    private val peerConnection: PeerConnection? by lazy {
-        buildPeerConnection(remoteView)
-    }
+    override val coroutineContext = Dispatchers.IO + job
 
-    private val rootEglBase: EglBase = EglBase.create()
-    private val videoCapturer by lazy { getVideoCapturer(context) }
-    private val localVideoSource by lazy { peerConnectionFactory.createVideoSource(false) }
-
-    private fun buildPeerConnectionFactory(context: Context): PeerConnectionFactory {
-        // Initialize PeerConnectionFactory options.
-        val options = PeerConnectionFactory.InitializationOptions.builder(context)
-            .setEnableInternalTracer(true)
-            .setFieldTrials("WebRTC-H264HighProfile/Enabled/")
-            .createInitializationOptions()
-        PeerConnectionFactory.initialize(options)
-
-        // Configure the PeerConnectionFactory builder.
-        val rootEglBase: EglBase = EglBase.create()
-        return PeerConnectionFactory
-            .builder()
-            .setVideoDecoderFactory(DefaultVideoDecoderFactory(rootEglBase.eglBaseContext))
-            .setVideoEncoderFactory(DefaultVideoEncoderFactory(rootEglBase.eglBaseContext, true, true))
-            .setOptions(PeerConnectionFactory.Options().apply {
-                disableEncryption = true
-                disableNetworkMonitor = true
-            })
-            .createPeerConnectionFactory()
-    }
-
-    private fun buildPeerConnection(remoteView: VideoSink): PeerConnection? {
-        val observer = object : PeerConnectionObserver() {
-            override fun onIceCandidate(p0: IceCandidate?) {
-                super.onIceCandidate(p0)
-                send(p0)
-                onIceCandidateReceived(p0!!)
-            }
-
-            override fun onAddStream(p0: MediaStream?) {
-                super.onAddStream(p0)
-                Log.d(TAG, "Add stream")
-                p0?.videoTracks?.get(0)?.addSink(remoteView)
-            }
+    private val client = HttpClient(CIO) {
+        install(WebSockets)
+        install(JsonFeature) {
+            serializer = GsonSerializer()
         }
-
-        return peerConnectionFactory.createPeerConnection(iceServer, observer)
     }
 
-    private fun <T> addToRequestQueue(req: Request<T>) {
-        requestQueue.add(req)
+    private val sendChannel = ConflatedBroadcastChannel<String>()
+
+    init {
+        connect()
     }
 
-    private fun getVideoCapturer(context: Context) =
-        Camera2Enumerator(context).run {
-            deviceNames.find {
-                isFrontFacing(it)
-            }?.let {
-                createCapturer(it, null)
-            } ?: throw IllegalStateException()
-        }
+    private fun connect() = launch {
+        client.ws(host = HOST_ADDRESS, port = 5000) {
+            val sendData = sendChannel.openSubscription()
+            try {
+                while (true) {
 
-    fun initSurfaceView(view: SurfaceViewRenderer) = view.run {
-        setMirror(true)
-        setEnableHardwareScaler(true)
-        init(rootEglBase.eglBaseContext, null)
-    }
-
-    fun startLocalVideoCapture(localVideoOutput: SurfaceViewRenderer) {
-        val surfaceTextureHelper = SurfaceTextureHelper.create(Thread.currentThread().name, rootEglBase.eglBaseContext)
-        (videoCapturer as VideoCapturer).initialize(surfaceTextureHelper, localVideoOutput.context, localVideoSource.capturerObserver)
-        videoCapturer.startCapture(320, 240, 60)
-        val localVideoTrack = peerConnectionFactory.createVideoTrack("100", localVideoSource)
-        localVideoTrack.addSink(localVideoOutput)
-
-        val localStream = peerConnectionFactory.createLocalMediaStream("101")
-        localStream.addTrack(localVideoTrack)
-        peerConnection?.addStream(localStream)
-    }
-
-    fun call() {
-        val constraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
-        }
-
-        peerConnection?.createOffer(object : AppSdpObserver() {
-            override fun onCreateSuccess(p0: SessionDescription?) {
-                peerConnection?.setLocalDescription(AppSdpObserver(), p0)
-                send(p0)
-            }
-        }, constraints)
-    }
-
-    fun answer() {
-        val constraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
-        }
-
-        peerConnection?.createAnswer(object : AppSdpObserver() {
-            override fun onCreateSuccess(p0: SessionDescription?) {
-                peerConnection?.setLocalDescription(AppSdpObserver(), p0)
-                send(p0)
-            }
-        }, constraints)
-    }
-
-    private fun send(data: Any?) {
-        val jsonObj = JSONObject(gson.toJson(data))
-        val url = "http://192.168.100.106:5000/echo"
-
-        val jsonObjectRequest = JsonObjectRequest(Request.Method.POST, url, jsonObj,
-            Response.Listener { response ->
-                val jsonObject = gson.fromJson(response.toString(), JsonObject::class.java)
-
-                GlobalScope.launch(Dispatchers.Main) {
-                    if (jsonObject.has("serverUrl")) {
-                        onIceCandidateReceived(
-                            gson.fromJson(
-                                jsonObject,
-                                IceCandidate::class.java
-                            )
-                        )
-                    } else if (jsonObject.has("type") && jsonObject.get("type").asString == "OFFER") {
-                        onOffer(gson.fromJson(jsonObject, SessionDescription::class.java))
-                    } else if (jsonObject.has("type") && jsonObject.get("type").asString == "ANSWER") {
-                        onAnswer(gson.fromJson(jsonObject, SessionDescription::class.java))
+                    sendData.poll()?.let {
+                        Log.v(this@SignalingClient.javaClass.simpleName, "Sending: $it")
+                        outgoing.send(Frame.Text(it))
+                    }
+                    incoming.poll()?.let { frame ->
+                        if (frame is Frame.Text) {
+                            val data = frame.readText()
+                            Log.v(this@SignalingClient.javaClass.simpleName, "Received: $data")
+                            val jsonObject = gson.fromJson(data, JsonObject::class.java)
+                            withContext(Dispatchers.Main) {
+                                if (jsonObject.has("serverUrl")) {
+                                    listener.onIceCandidateReceived(gson.fromJson(jsonObject, IceCandidate::class.java))
+                                } else if (jsonObject.has("type") && jsonObject.get("type").asString == "OFFER") {
+                                    listener.onOfferReceived(gson.fromJson(jsonObject, SessionDescription::class.java))
+                                } else if (jsonObject.has("type") && jsonObject.get("type").asString == "ANSWER") {
+                                    listener.onAnswerReceived(gson.fromJson(jsonObject, SessionDescription::class.java))
+                                }
+                            }
+                        }
                     }
                 }
-            },
-
-            Response.ErrorListener { error ->
-                Log.d(TAG, error.toString())
+            } catch (exception: Throwable) {
+                Log.e(TAG,"asd",exception)
             }
-        )
-
-        addToRequestQueue(jsonObjectRequest)
+        }
     }
 
-    private fun onIceCandidateReceived(iceCandidate: IceCandidate) {
-        peerConnection?.addIceCandidate(iceCandidate)
+    fun send(dataObject: Any?) = runBlocking {
+        sendChannel.send(gson.toJson(dataObject))
     }
 
-    private fun onOffer(sessionDescription: SessionDescription) {
-        peerConnection?.setRemoteDescription(AppSdpObserver(), sessionDescription)
-        answer()
-    }
-
-    private fun onAnswer(sessionDescription: SessionDescription) {
-        peerConnection?.setRemoteDescription(AppSdpObserver(), sessionDescription)
-        Log.d(TAG, "Got answer.")
+    fun destroy() {
+        client.close()
+        job.complete()
     }
 }
