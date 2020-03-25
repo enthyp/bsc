@@ -46,7 +46,7 @@ class CallActivity : AppCompatActivity() {
         rtcClient.initSurfaceView(binding.remoteView)
         rtcClient.initSurfaceView(binding.localView)
         rtcClient.startLocalVideoCapture(binding.localView)
-        rtcClient.call()
+        //rtcClient.call()
     }
 
     private fun requestCameraPermission(dialogShown: Boolean = false) {

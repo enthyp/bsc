@@ -143,6 +143,10 @@ class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientLi
     override fun onOfferReceived(sessionDescription: SessionDescription) {
         Log.d(TAG, "Offer received.")
         peerConnection!!.setRemoteDescription(object : AppSdpObserver() {
+            override fun onCreateFailure(p0: String?) {
+                super.onCreateFailure(p0)
+                Log.d(TAG, "FUCK CREATE")
+            }
             override fun onCreateSuccess(p0: SessionDescription?) {
                 super.onCreateSuccess(p0)
                 Log.d(TAG, "Remote creatset successfully")
@@ -152,6 +156,11 @@ class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientLi
                 super.onSetSuccess()
                 Log.d(TAG, "Remote set successfully")
                 answer()
+            }
+
+            override fun onSetFailure(p0: String?) {
+                super.onSetFailure(p0)
+                Log.d(TAG, p0!!)
             }
         }, sessionDescription)
     }
