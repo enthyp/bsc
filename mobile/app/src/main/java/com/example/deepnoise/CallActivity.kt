@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
@@ -19,6 +20,7 @@ class CallActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityCallBinding
+    private lateinit var rtcClient: RTCClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,14 +39,14 @@ class CallActivity : AppCompatActivity() {
     }
 
     private fun onCameraPermissionGranted() {
-        val signalingClient = RTCClient(
+        rtcClient = RTCClient(
             binding.remoteView,
             application
         )
-        signalingClient.initSurfaceView(binding.remoteView)
-        signalingClient.initSurfaceView(binding.localView)
-        signalingClient.startLocalVideoCapture(binding.localView)
-        signalingClient.call()
+        rtcClient.initSurfaceView(binding.remoteView)
+        rtcClient.initSurfaceView(binding.localView)
+        rtcClient.startLocalVideoCapture(binding.localView)
+        rtcClient.call()
     }
 
     private fun requestCameraPermission(dialogShown: Boolean = false) {
@@ -81,5 +83,10 @@ class CallActivity : AppCompatActivity() {
 
     private fun onCameraPermissionDenied() {
         Toast.makeText(this, "Camera Permission Denied", Toast.LENGTH_LONG).show()
+    }
+
+    override fun onDestroy() {
+        rtcClient.destroy()
+        super.onDestroy()
     }
 }

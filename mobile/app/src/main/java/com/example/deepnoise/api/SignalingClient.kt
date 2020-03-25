@@ -5,7 +5,6 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.features.json.GsonSerializer
 import io.ktor.client.features.json.JsonFeature
 import io.ktor.client.features.websocket.WebSockets
@@ -14,15 +13,18 @@ import io.ktor.http.cio.websocket.Frame
 import io.ktor.http.cio.websocket.readText
 import io.ktor.util.KtorExperimentalAPI
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.BroadcastChannel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ConflatedBroadcastChannel
 import org.webrtc.IceCandidate
 import org.webrtc.SessionDescription
 
+@ExperimentalCoroutinesApi
 @KtorExperimentalAPI
 class SignalingClient(private val listener: SignalingClientListener) : CoroutineScope {
 
     companion object {
-        private const val HOST_ADDRESS = "192.168.43.21"
+        private const val HOST_ADDRESS = "192.168.100.106"
     }
 
     private val TAG = "SignalingClient"
@@ -40,7 +42,7 @@ class SignalingClient(private val listener: SignalingClientListener) : Coroutine
         }
     }
 
-    private val sendChannel = ConflatedBroadcastChannel<String>()
+    private val sendChannel = Channel<String>()
 
     init {
         connect()
@@ -48,33 +50,42 @@ class SignalingClient(private val listener: SignalingClientListener) : Coroutine
 
     private fun connect() = launch {
         client.ws(host = HOST_ADDRESS, port = 5000) {
-            val sendData = sendChannel.openSubscription()
+
+            launch {
+                try {
+                    while (true) {
+                        sendChannel.receive().also {
+                            Log.v(TAG, "Sending: $it")
+                            outgoing.send(Frame.Text(it))
+                        }
+                    }
+                } catch (exception: Throwable) {
+                    Log.e(TAG,"Error...", exception)
+                }
+            }
+
             try {
                 while (true) {
+                    val frame = incoming.receive()
+                    if (frame is Frame.Text) {
+                        val data = frame.readText()
+                        Log.v(TAG, "Received: $data")
 
-                    sendData.poll()?.let {
-                        Log.v(this@SignalingClient.javaClass.simpleName, "Sending: $it")
-                        outgoing.send(Frame.Text(it))
-                    }
-                    incoming.poll()?.let { frame ->
-                        if (frame is Frame.Text) {
-                            val data = frame.readText()
-                            Log.v(this@SignalingClient.javaClass.simpleName, "Received: $data")
-                            val jsonObject = gson.fromJson(data, JsonObject::class.java)
-                            withContext(Dispatchers.Main) {
-                                if (jsonObject.has("serverUrl")) {
-                                    listener.onIceCandidateReceived(gson.fromJson(jsonObject, IceCandidate::class.java))
-                                } else if (jsonObject.has("type") && jsonObject.get("type").asString == "OFFER") {
-                                    listener.onOfferReceived(gson.fromJson(jsonObject, SessionDescription::class.java))
-                                } else if (jsonObject.has("type") && jsonObject.get("type").asString == "ANSWER") {
-                                    listener.onAnswerReceived(gson.fromJson(jsonObject, SessionDescription::class.java))
-                                }
+                        val jsonObject = gson.fromJson(data, JsonObject::class.java)
+
+                        withContext(Dispatchers.Main) {
+                            if (jsonObject.has("serverUrl")) {
+                                listener.onIceCandidateReceived(gson.fromJson(jsonObject, IceCandidate::class.java))
+                            } else if (jsonObject.has("type") && jsonObject.get("type").asString == "OFFER") {
+                                listener.onOfferReceived(gson.fromJson(jsonObject, SessionDescription::class.java))
+                            } else if (jsonObject.has("type") && jsonObject.get("type").asString == "ANSWER") {
+                                listener.onAnswerReceived(gson.fromJson(jsonObject, SessionDescription::class.java))
                             }
                         }
                     }
                 }
             } catch (exception: Throwable) {
-                Log.e(TAG,"asd",exception)
+                Log.e(TAG,"Error...", exception)
             }
         }
     }

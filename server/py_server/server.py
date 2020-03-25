@@ -1,9 +1,10 @@
 import logging
 import aiohttp
+import sys
 import uuid
 from aiohttp import web
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 
 async def websocket_handler(request):
@@ -15,15 +16,25 @@ async def websocket_handler(request):
     clients[this] = ws
 
     async for msg in ws:
+        logging.debug(msg.data)
+
         if msg.type == aiohttp.WSMsgType.TEXT:
             for c_id, c_ws in request.app['clients'].items():
                 if c_id != this:
+                    logging.debug('SENT: {} -> {}'.format(this, c_id))
                     await c_ws.send_str(msg.data)
         elif msg.type == aiohttp.WSMsgType.ERROR:
-            print('ws connection closed with exception %s' %
-                  ws.exception())
+            logging.debug('ws connection closed with exception {}'.format(ws.exception()))
+            await ws.close()
+            break
+        elif msg.type == aiohttp.WSMsgType.CLOSE:
+            logging.debug('closing')
+            await ws.close()
+            break
 
-    print('websocket connection closed')
+    logging.debug('websocket connection closed')
+    del clients[this]
+
     return ws
 
 
@@ -32,7 +43,7 @@ def main():
     app['clients'] = {}
 
     app.add_routes([web.get('/', websocket_handler)])
-    web.run_app(app, host='192.168.43.21', port=5000)
+    web.run_app(app, host='192.168.100.106', port=5000)
 
 
 if __name__ == '__main__':

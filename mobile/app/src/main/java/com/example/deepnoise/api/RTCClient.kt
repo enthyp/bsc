@@ -5,6 +5,7 @@ import android.util.Log
 import com.google.gson.Gson
 import io.ktor.util.KtorExperimentalAPI
 import org.webrtc.*
+import kotlin.math.sign
 
 
 class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientListener {
@@ -58,6 +59,7 @@ class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientLi
                 super.onIceCandidate(p0)
                 signalingClient.send(p0)
                 onIceCandidateReceived(p0!!)
+                Log.d(TAG, "ICE candidate from PeerConnection")
             }
 
             override fun onAddStream(p0: MediaStream?) {
@@ -92,7 +94,7 @@ class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientLi
         val localVideoTrack = peerConnectionFactory.createVideoTrack("100", localVideoSource)
         localVideoTrack.addSink(localVideoOutput)
 
-        val localStream = peerConnectionFactory.createLocalMediaStream("101")
+        val localStream = peerConnectionFactory.createLocalMediaStream("100")
         localStream.addTrack(localVideoTrack)
         peerConnection?.addStream(localStream)
     }
@@ -104,21 +106,32 @@ class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientLi
 
         peerConnection?.createOffer(object : AppSdpObserver() {
             override fun onCreateSuccess(p0: SessionDescription?) {
-                peerConnection?.setLocalDescription(AppSdpObserver(), p0)
-                signalingClient.send(p0)
+                peerConnection?.setLocalDescription(object : AppSdpObserver() {
+                    override fun onSetSuccess() {
+                        super.onSetSuccess()
+                        signalingClient.send(p0)
+                        Log.d(TAG, "Offer created in call.")
+                    }
+                }, p0)
             }
         }, constraints)
     }
 
     fun answer() {
+        Log.d(TAG, "ASNWER CALLED")
         val constraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
         }
 
         peerConnection?.createAnswer(object : AppSdpObserver() {
             override fun onCreateSuccess(p0: SessionDescription?) {
-                peerConnection?.setLocalDescription(AppSdpObserver(), p0)
-                signalingClient.send(p0)
+                peerConnection?.setLocalDescription(object : AppSdpObserver() {
+                    override fun onSetSuccess() {
+                        super.onSetSuccess()
+                        signalingClient.send(p0)
+                        Log.d(TAG, "Answer created in answer.")
+                    }
+                }, p0)
             }
         }, constraints)
     }
@@ -128,11 +141,27 @@ class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientLi
     }
 
     override fun onOfferReceived(sessionDescription: SessionDescription) {
-        peerConnection?.setRemoteDescription(AppSdpObserver(), sessionDescription)
-        answer()
+        Log.d(TAG, "Offer received.")
+        peerConnection!!.setRemoteDescription(object : AppSdpObserver() {
+            override fun onCreateSuccess(p0: SessionDescription?) {
+                super.onCreateSuccess(p0)
+                Log.d(TAG, "Remote creatset successfully")
+                answer()
+            }
+            override fun onSetSuccess() {
+                super.onSetSuccess()
+                Log.d(TAG, "Remote set successfully")
+                answer()
+            }
+        }, sessionDescription)
     }
 
     override fun onAnswerReceived(sessionDescription: SessionDescription) {
+        Log.d(TAG, "Answer received.")
         peerConnection?.setRemoteDescription(AppSdpObserver(), sessionDescription)
+    }
+
+    fun destroy() {
+        signalingClient.destroy()
     }
 }
