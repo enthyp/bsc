@@ -1,29 +1,42 @@
 package com.example.deepnoise
 
 import android.Manifest
+import android.R.attr.track
 import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.AudioFormat
 import android.media.AudioManager
-import androidx.appcompat.app.AppCompatActivity
+import android.media.AudioTrack
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.getSystemService
 import com.example.deepnoise.api.RTCClient
+import com.example.deepnoise.audio.FIRFilter
 import com.example.deepnoise.databinding.ActivityCallBinding
+import org.webrtc.audio.JavaAudioDeviceModule
+import org.webrtc.voiceengine.WebRtcAudioRecord
+import org.webrtc.voiceengine.WebRtcAudioUtils
+import java.nio.ByteBuffer
+
 
 class CallActivity : AppCompatActivity() {
 
     companion object {
         private const val AUDIO_PERMISSION_REQUEST_CODE = 1
         private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
+        private const val BUFFER_SIZE = 16384
+        private const val SAMPLE_RATE = 48000  // TODO: need to figure out real rate doe
     }
 
     private lateinit var binding: ActivityCallBinding
     private lateinit var rtcClient: RTCClient
+    private lateinit var audioTrack: AudioTrack
+    private var filter = FIRFilter(24000.0 / SAMPLE_RATE, 257)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,10 +44,10 @@ class CallActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.callButton.setOnClickListener { rtcClient.call() }
-        checkCameraPermission()
+        checkAudioPermission()
     }
 
-    private fun checkCameraPermission() {
+    private fun checkAudioPermission() {
         if (ContextCompat.checkSelfPermission(this, AUDIO_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
             requestAudioPermission()
         } else {
@@ -42,8 +55,13 @@ class CallActivity : AppCompatActivity() {
         }
     }
 
+    private fun audioCallback() = JavaAudioDeviceModule.AudioTrackProcessingCallback {
+        filter.run(it)
+    }
+
     private fun onAudioPermissionGranted() {
         rtcClient = RTCClient(
+            audioCallback(),
             application
         )
     }

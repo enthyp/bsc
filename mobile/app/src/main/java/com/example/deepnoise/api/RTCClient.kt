@@ -6,13 +6,15 @@ import android.util.Log
 import com.google.gson.Gson
 import io.ktor.util.KtorExperimentalAPI
 import org.webrtc.*
+import org.webrtc.audio.JavaAudioDeviceModule
 import org.webrtc.voiceengine.WebRtcAudioManager
 import org.webrtc.voiceengine.WebRtcAudioRecord
 import org.webrtc.voiceengine.WebRtcAudioTrack
 import org.webrtc.voiceengine.WebRtcAudioUtils
 
 
-class RTCClient(val context: Context) : SignalingClientListener {
+class RTCClient(val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback,
+                val context: Context) : SignalingClientListener {
 
     private val TAG = "RTCClient"
 
@@ -46,8 +48,13 @@ class RTCClient(val context: Context) : SignalingClientListener {
 
         // Configure the PeerConnectionFactory builder.
         val rootEglBase: EglBase = EglBase.create()
+        val audioDeviceModule = JavaAudioDeviceModule.builder(context)
+            .setAudioTrackProcessingCallback(audioSamplesCallback)
+            .createAudioDeviceModule()
+
         return PeerConnectionFactory
             .builder()
+            .setAudioDeviceModule(audioDeviceModule)
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(rootEglBase.eglBaseContext))
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(rootEglBase.eglBaseContext, true, true))
             .setOptions(PeerConnectionFactory.Options().apply {
@@ -68,11 +75,8 @@ class RTCClient(val context: Context) : SignalingClientListener {
 
             override fun onAddStream(p0: MediaStream?) {
                 super.onAddStream(p0)
+                p0?.audioTracks?.get(0)?.setEnabled(true)
                 Log.d(TAG, "Add stream")
-//                WebRtcAudioRecord.setOnAudioSamplesReady {
-//                    audioSamples: WebRtcAudioRecord.AudioSamples? ->
-//                    audioSamples?.data
-//                }
             }
         }
 
@@ -80,15 +84,11 @@ class RTCClient(val context: Context) : SignalingClientListener {
     }
 
     init {
-        WebRtcAudioUtils.setWebRtcBasedAcousticEchoCanceler(true);
-        val audioConstraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
+        WebRtcAudioUtils.setWebRtcBasedAcousticEchoCanceler(true)
+        WebRtcAudioUtils.setWebRtcBasedNoiseSuppressor(true)
+        WebRtcAudioUtils.setWebRtcBasedAutomaticGainControl(true)
 
-            mandatory.add(MediaConstraints.KeyValuePair("noiseSuppression", "true"))
-            mandatory.add(MediaConstraints.KeyValuePair("echoCancellation", "true"))
-
-        }
+        val audioConstraints = MediaConstraints()
         val audioSource = peerConnectionFactory.createAudioSource(audioConstraints);
         val localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource)
         val localStream = peerConnectionFactory.createLocalMediaStream("101")
