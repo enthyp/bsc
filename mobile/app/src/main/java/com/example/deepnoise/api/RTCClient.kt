@@ -1,14 +1,18 @@
 package com.example.deepnoise.api
 
 import android.content.Context
+import android.media.AudioManager
 import android.util.Log
 import com.google.gson.Gson
 import io.ktor.util.KtorExperimentalAPI
 import org.webrtc.*
-import kotlin.math.sign
+import org.webrtc.voiceengine.WebRtcAudioManager
+import org.webrtc.voiceengine.WebRtcAudioRecord
+import org.webrtc.voiceengine.WebRtcAudioTrack
+import org.webrtc.voiceengine.WebRtcAudioUtils
 
 
-class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientListener {
+class RTCClient(val context: Context) : SignalingClientListener {
 
     private val TAG = "RTCClient"
 
@@ -22,7 +26,7 @@ class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientLi
         buildPeerConnectionFactory(context)
     }
     private val peerConnection: PeerConnection? by lazy {
-        buildPeerConnection(remoteView)
+        buildPeerConnection()
     }
 
     private val rootEglBase: EglBase = EglBase.create()
@@ -53,7 +57,7 @@ class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientLi
             .createPeerConnectionFactory()
     }
 
-    private fun buildPeerConnection(remoteView: VideoSink): PeerConnection? {
+    private fun buildPeerConnection(): PeerConnection? {
         val observer = object : PeerConnectionObserver() {
             override fun onIceCandidate(p0: IceCandidate?) {
                 super.onIceCandidate(p0)
@@ -65,11 +69,31 @@ class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientLi
             override fun onAddStream(p0: MediaStream?) {
                 super.onAddStream(p0)
                 Log.d(TAG, "Add stream")
-                p0?.videoTracks?.get(0)?.addSink(remoteView)
+//                WebRtcAudioRecord.setOnAudioSamplesReady {
+//                    audioSamples: WebRtcAudioRecord.AudioSamples? ->
+//                    audioSamples?.data
+//                }
             }
         }
 
         return peerConnectionFactory.createPeerConnection(iceServer, observer)
+    }
+
+    init {
+        WebRtcAudioUtils.setWebRtcBasedAcousticEchoCanceler(true);
+        val audioConstraints = MediaConstraints().apply {
+            mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
+
+            mandatory.add(MediaConstraints.KeyValuePair("noiseSuppression", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("echoCancellation", "true"))
+
+        }
+        val audioSource = peerConnectionFactory.createAudioSource(audioConstraints);
+        val localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource)
+        val localStream = peerConnectionFactory.createLocalMediaStream("101")
+        localStream.addTrack(localAudioTrack)
+        peerConnection?.addStream(localStream)
     }
 
     private fun getVideoCapturer(context: Context) =
@@ -101,7 +125,7 @@ class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientLi
 
     fun call() {
         val constraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
         }
 
         peerConnection?.createOffer(object : AppSdpObserver() {
@@ -118,9 +142,9 @@ class RTCClient(remoteView: VideoSink, val context: Context) : SignalingClientLi
     }
 
     fun answer() {
-        Log.d(TAG, "ASNWER CALLED")
+        Log.d(TAG, "ANSWER CALLED")
         val constraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
         }
 
         peerConnection?.createAnswer(object : AppSdpObserver() {

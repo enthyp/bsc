@@ -1,7 +1,9 @@
 package com.example.deepnoise
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
@@ -9,14 +11,15 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
 import com.example.deepnoise.api.RTCClient
 import com.example.deepnoise.databinding.ActivityCallBinding
 
 class CallActivity : AppCompatActivity() {
 
     companion object {
-        private const val CAMERA_PERMISSION_REQUEST_CODE = 1
-        private const val CAMERA_PERMISSION = Manifest.permission.CAMERA
+        private const val AUDIO_PERMISSION_REQUEST_CODE = 1
+        private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
     }
 
     private lateinit var binding: ActivityCallBinding
@@ -27,33 +30,29 @@ class CallActivity : AppCompatActivity() {
         binding = ActivityCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        binding.callButton.setOnClickListener { rtcClient.call() }
         checkCameraPermission()
     }
 
     private fun checkCameraPermission() {
-        if (ContextCompat.checkSelfPermission(this, CAMERA_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
-            requestCameraPermission()
+        if (ContextCompat.checkSelfPermission(this, AUDIO_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
+            requestAudioPermission()
         } else {
-            onCameraPermissionGranted()
+            onAudioPermissionGranted()
         }
     }
 
-    private fun onCameraPermissionGranted() {
+    private fun onAudioPermissionGranted() {
         rtcClient = RTCClient(
-            binding.remoteView,
             application
         )
-        rtcClient.initSurfaceView(binding.remoteView)
-        rtcClient.initSurfaceView(binding.localView)
-        rtcClient.startLocalVideoCapture(binding.localView)
-        //rtcClient.call()
     }
 
-    private fun requestCameraPermission(dialogShown: Boolean = false) {
-        if (ActivityCompat.shouldShowRequestPermissionRationale(this, CAMERA_PERMISSION) && !dialogShown) {
+    private fun requestAudioPermission(dialogShown: Boolean = false) {
+        if (ActivityCompat.shouldShowRequestPermissionRationale(this, AUDIO_PERMISSION) && !dialogShown) {
             showPermissionRationaleDialog()
         } else {
-            ActivityCompat.requestPermissions(this, arrayOf(CAMERA_PERMISSION), CAMERA_PERMISSION_REQUEST_CODE)
+            ActivityCompat.requestPermissions(this, arrayOf(AUDIO_PERMISSION), AUDIO_PERMISSION_REQUEST_CODE)
         }
     }
 
@@ -63,26 +62,26 @@ class CallActivity : AppCompatActivity() {
             .setMessage("This app need the camera to function")
             .setPositiveButton("Grant") { dialog, _ ->
                 dialog.dismiss()
-                requestCameraPermission(true)
+                requestAudioPermission(true)
             }
             .setNegativeButton("Deny") { dialog, _ ->
                 dialog.dismiss()
-                onCameraPermissionDenied()
+                onAudioPermissionDenied()
             }
             .show()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == CAMERA_PERMISSION_REQUEST_CODE && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-            onCameraPermissionGranted()
+        if (requestCode == AUDIO_PERMISSION_REQUEST_CODE && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+            onAudioPermissionGranted()
         } else {
-            onCameraPermissionDenied()
+            onAudioPermissionDenied()
         }
     }
 
-    private fun onCameraPermissionDenied() {
-        Toast.makeText(this, "Camera Permission Denied", Toast.LENGTH_LONG).show()
+    private fun onAudioPermissionDenied() {
+        Toast.makeText(this, "Audio Permission Denied", Toast.LENGTH_LONG).show()
     }
 
     override fun onDestroy() {

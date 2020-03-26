@@ -7,21 +7,22 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.features.json.GsonSerializer
 import io.ktor.client.features.json.JsonFeature
+import io.ktor.client.features.websocket.ClientWebSocketSession
 import io.ktor.client.features.websocket.WebSockets
 import io.ktor.client.features.websocket.ws
 import io.ktor.http.cio.websocket.Frame
+import io.ktor.http.cio.websocket.close
 import io.ktor.http.cio.websocket.readText
 import io.ktor.util.KtorExperimentalAPI
 import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.BroadcastChannel
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ConflatedBroadcastChannel
 import org.webrtc.IceCandidate
 import org.webrtc.SessionDescription
 
 @ExperimentalCoroutinesApi
 @KtorExperimentalAPI
-class SignalingClient(private val listener: SignalingClientListener) : CoroutineScope {
+class SignalingClient(private val listener: SignalingClientListener) :
+    CoroutineScope by CoroutineScope(Dispatchers.IO) {
 
     companion object {
         private const val HOST_ADDRESS = "192.168.100.106"
@@ -29,11 +30,7 @@ class SignalingClient(private val listener: SignalingClientListener) : Coroutine
 
     private val TAG = "SignalingClient"
 
-    private val job = Job()
-
     private val gson = Gson()
-
-    override val coroutineContext = Dispatchers.IO + job
 
     private val client = HttpClient(CIO) {
         install(WebSockets)
@@ -44,12 +41,15 @@ class SignalingClient(private val listener: SignalingClientListener) : Coroutine
 
     private val sendChannel = Channel<String>()
 
+    private lateinit var clientSession: ClientWebSocketSession
+
     init {
         connect()
     }
 
     private fun connect() = launch {
         client.ws(host = HOST_ADDRESS, port = 5000) {
+            clientSession = this
 
             launch {
                 try {
@@ -73,7 +73,7 @@ class SignalingClient(private val listener: SignalingClientListener) : Coroutine
 
                         val jsonObject = gson.fromJson(data, JsonObject::class.java)
 
-                        withContext(Dispatchers.Main) {
+                        launch(Dispatchers.Main) {
                             if (jsonObject.has("serverUrl")) {
                                 listener.onIceCandidateReceived(gson.fromJson(jsonObject, IceCandidate::class.java))
                             } else if (jsonObject.has("type") && jsonObject.get("type").asString == "OFFER") {
@@ -88,14 +88,17 @@ class SignalingClient(private val listener: SignalingClientListener) : Coroutine
                 Log.e(TAG,"Error...", exception)
             }
         }
+
+
     }
 
-    fun send(dataObject: Any?) = runBlocking {
+    fun send(dataObject: Any?) = launch(coroutineContext) {
         sendChannel.send(gson.toJson(dataObject))
     }
 
-    fun destroy() {
+    fun destroy() = launch {
+        clientSession.close()
         client.close()
-        job.complete()
+        cancel()
     }
 }
