@@ -18,10 +18,17 @@ import androidx.core.content.ContextCompat
 import com.example.deepnoise.api.RTCClient
 import com.example.deepnoise.audio.FIRFilter
 import com.example.deepnoise.databinding.ActivityCallBinding
+import io.ktor.utils.io.bits.copyTo
+import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.support.common.FileUtil
 import org.webrtc.audio.JavaAudioDeviceModule
+import org.webrtc.voiceengine.WebRtcAudioManager
 import org.webrtc.voiceengine.WebRtcAudioRecord
+import org.webrtc.voiceengine.WebRtcAudioTrack
 import org.webrtc.voiceengine.WebRtcAudioUtils
+import java.io.IOException
 import java.nio.ByteBuffer
+import java.nio.MappedByteBuffer
 
 
 class CallActivity : AppCompatActivity() {
@@ -29,14 +36,15 @@ class CallActivity : AppCompatActivity() {
     companion object {
         private const val AUDIO_PERMISSION_REQUEST_CODE = 1
         private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
-        private const val BUFFER_SIZE = 16384
-        private const val SAMPLE_RATE = 48000  // TODO: need to figure out real rate doe
+        private const val BUFFER_SIZE = 441  // number of samples
     }
 
     private lateinit var binding: ActivityCallBinding
     private lateinit var rtcClient: RTCClient
-    private lateinit var audioTrack: AudioTrack
-    private var filter = FIRFilter(24000.0 / SAMPLE_RATE, 257)
+    private lateinit var tfliteModel: MappedByteBuffer
+    private lateinit var tflite: Interpreter
+    private var inBuffer: FloatArray = FloatArray(BUFFER_SIZE)
+    private var outBuffer: Array<FloatArray> = arrayOf(FloatArray(BUFFER_SIZE))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +53,13 @@ class CallActivity : AppCompatActivity() {
 
         binding.callButton.setOnClickListener { rtcClient.call() }
         checkAudioPermission()
+
+        try{
+            tfliteModel = FileUtil.loadMappedFile(this, "identity_model.tflite")
+            tflite = Interpreter(tfliteModel)
+        } catch (e: IOException){
+            Log.e("tfliteSupport", "Error reading model", e);
+        }
     }
 
     private fun checkAudioPermission() {
@@ -56,7 +71,13 @@ class CallActivity : AppCompatActivity() {
     }
 
     private fun audioCallback() = JavaAudioDeviceModule.AudioTrackProcessingCallback {
-        filter.run(it)
+        for (i in 0 until BUFFER_SIZE)
+            inBuffer[i] = it.getShort(2 * i).toFloat()
+
+        tflite.run(inBuffer, outBuffer)
+
+        for (i in 0 until BUFFER_SIZE)
+            it.putShort(2 * i, outBuffer[0][i].toShort())
     }
 
     private fun onAudioPermissionGranted() {
