@@ -15,6 +15,7 @@ class FMSTokenUpdateWorker(
     workerParams: WorkerParameters)
     : CoroutineWorker(appContext, workerParams) {
 
+    // TODO: return Result.retry() on error?
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val identity = inputData.getString("identity")
         val token = inputData.getString("token")

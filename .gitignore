@@ -1,6 +1,9 @@
 # Nested .gitignores.
 */**/.gitignore
 
+# Credentials.
+deepnoise-9dc43-firebase-adminsdk-9273q-ccdc023fde.json
+
 # WebRTC sources.
 webrtc/src/
 

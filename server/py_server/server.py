@@ -4,6 +4,8 @@ import sys
 import uuid
 from aiohttp import web
 
+from notifications import notify, setup_notifications
+
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 
@@ -45,19 +47,26 @@ async def websocket_handler(request):
 
 async def token_handler(request):
     body = await request.json()
-    logging.debug(body)
+    identity, token = body['id'], body['token']
+    request.app['tokens'][identity] = token
+
+    # Let's try to push a notification to him.
+    await notify(token, {'type': 'incoming', 'caller': 'bob'})
 
     return web.Response()
 
 
 def main():
+    setup_notifications()
+
     app = web.Application()
     app['clients'] = {}
-
+    app['tokens'] = {}
     app.add_routes([
         web.get('/', websocket_handler),
         web.post('/token', token_handler)
     ])
+
     web.run_app(app, host='192.168.100.106', port=5000)
 
 

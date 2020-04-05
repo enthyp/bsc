@@ -11,6 +11,7 @@ import com.lanecki.deepnoise.workers.FMSTokenUpdateWorker
 class FMService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         Log.d(TAG, "From: " + remoteMessage.from)
+
         // Check if message contains a data payload.
         if (remoteMessage.data.isNotEmpty()) {
             Log.d(
