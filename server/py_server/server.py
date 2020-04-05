@@ -1,5 +1,6 @@
 import logging
 import aiohttp
+import asyncio
 import sys
 import uuid
 from aiohttp import web
@@ -51,6 +52,7 @@ async def token_handler(request):
     request.app['tokens'][identity] = token
 
     # Let's try to push a notification to him.
+    await asyncio.sleep(2)
     await notify(token, {'type': 'incoming call', 'caller': 'bob'})
 
     return web.Response()

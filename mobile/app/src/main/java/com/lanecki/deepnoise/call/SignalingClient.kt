@@ -11,7 +11,6 @@ import io.ktor.client.features.websocket.ClientWebSocketSession
 import io.ktor.client.features.websocket.WebSockets
 import io.ktor.client.features.websocket.ws
 import io.ktor.http.cio.websocket.Frame
-import io.ktor.http.cio.websocket.close
 import io.ktor.http.cio.websocket.readText
 import io.ktor.util.KtorExperimentalAPI
 import kotlinx.coroutines.*
@@ -106,6 +105,7 @@ class SignalingClient(private val listener: SignalingClientListener) :
             }
         } catch (exception: Throwable) {
             Log.e(TAG, "Holy fuck! ", exception)
+            // TODO: requires much better error handling (toast or sth)
         }
 
     }
