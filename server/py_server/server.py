@@ -43,11 +43,21 @@ async def websocket_handler(request):
     return ws
 
 
+async def token_handler(request):
+    body = await request.json()
+    logging.debug(body)
+
+    return web.Response()
+
+
 def main():
     app = web.Application()
     app['clients'] = {}
 
-    app.add_routes([web.get('/', websocket_handler)])
+    app.add_routes([
+        web.get('/', websocket_handler),
+        web.post('/token', token_handler)
+    ])
     web.run_app(app, host='192.168.100.106', port=5000)
 
 
