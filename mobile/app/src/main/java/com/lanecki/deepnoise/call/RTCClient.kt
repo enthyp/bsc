@@ -9,12 +9,12 @@ import org.webrtc.audio.JavaAudioDeviceModule
 import org.webrtc.voiceengine.WebRtcAudioUtils
 
 
-class RTCClient(val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback,
-                val context: Context) : SignalingClientListener {
+class RTCClient(
+    private val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback,
+    private val context: Context)
+    : SignalingClientListener {
 
     private val TAG = "RTCClient"
-
-    private val gson = Gson()
 
     private val iceServer = listOf(
         PeerConnection.IceServer.builder("stun:stun.l.google.com:19302")
@@ -26,10 +26,6 @@ class RTCClient(val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProces
     private val peerConnection: PeerConnection? by lazy {
         buildPeerConnection()
     }
-
-    private val rootEglBase: EglBase = EglBase.create()
-    private val videoCapturer by lazy { getVideoCapturer(context) }
-    private val localVideoSource by lazy { peerConnectionFactory.createVideoSource(false) }
 
     @KtorExperimentalAPI
     private var signalingClient = SignalingClient(this)
@@ -43,7 +39,6 @@ class RTCClient(val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProces
         PeerConnectionFactory.initialize(options)
 
         // Configure the PeerConnectionFactory builder.
-        val rootEglBase: EglBase = EglBase.create()
         val audioDeviceModule = JavaAudioDeviceModule.builder(context)
             .setAudioTrackProcessingCallback(audioSamplesCallback)
             .createAudioDeviceModule()
@@ -51,8 +46,6 @@ class RTCClient(val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProces
         return PeerConnectionFactory
             .builder()
             .setAudioDeviceModule(audioDeviceModule)
-            .setVideoDecoderFactory(DefaultVideoDecoderFactory(rootEglBase.eglBaseContext))
-            .setVideoEncoderFactory(DefaultVideoEncoderFactory(rootEglBase.eglBaseContext, true, true))
             .setOptions(PeerConnectionFactory.Options().apply {
                 disableEncryption = true
                 disableNetworkMonitor = true
@@ -89,33 +82,6 @@ class RTCClient(val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProces
         val localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource)
         val localStream = peerConnectionFactory.createLocalMediaStream("101")
         localStream.addTrack(localAudioTrack)
-        peerConnection?.addStream(localStream)
-    }
-
-    private fun getVideoCapturer(context: Context) =
-        Camera2Enumerator(context).run {
-            deviceNames.find {
-                isFrontFacing(it)
-            }?.let {
-                createCapturer(it, null)
-            } ?: throw IllegalStateException()
-        }
-
-    fun initSurfaceView(view: SurfaceViewRenderer) = view.run {
-        setMirror(true)
-        setEnableHardwareScaler(true)
-        init(rootEglBase.eglBaseContext, null)
-    }
-
-    fun startLocalVideoCapture(localVideoOutput: SurfaceViewRenderer) {
-        val surfaceTextureHelper = SurfaceTextureHelper.create(Thread.currentThread().name, rootEglBase.eglBaseContext)
-        (videoCapturer as VideoCapturer).initialize(surfaceTextureHelper, localVideoOutput.context, localVideoSource.capturerObserver)
-        videoCapturer.startCapture(320, 240, 60)
-        val localVideoTrack = peerConnectionFactory.createVideoTrack("100", localVideoSource)
-        localVideoTrack.addSink(localVideoOutput)
-
-        val localStream = peerConnectionFactory.createLocalMediaStream("100")
-        localStream.addTrack(localVideoTrack)
         peerConnection?.addStream(localStream)
     }
 

@@ -48,47 +48,65 @@ class SignalingClient(private val listener: SignalingClientListener) :
     }
 
     private fun connect() = launch {
-        client.ws(host = HOST_ADDRESS, port = 5000) {
-            clientSession = this
+        try {
+            client.ws(host = HOST_ADDRESS, port = 5000) {
+                clientSession = this
 
-            launch {
+                launch {
+                    try {
+                        while (true) {
+                            sendChannel.receive().also {
+                                Log.v(TAG, "Sending: $it")
+                                outgoing.send(Frame.Text(it))
+                            }
+                        }
+                    } catch (exception: Throwable) {
+                        Log.e(TAG, "Error...", exception)
+                    }
+                }
+
                 try {
                     while (true) {
-                        sendChannel.receive().also {
-                            Log.v(TAG, "Sending: $it")
-                            outgoing.send(Frame.Text(it))
-                        }
-                    }
-                } catch (exception: Throwable) {
-                    Log.e(TAG,"Error...", exception)
-                }
-            }
+                        val frame = incoming.receive()
+                        if (frame is Frame.Text) {
+                            val data = frame.readText()
+                            Log.v(TAG, "Received: $data")
 
-            try {
-                while (true) {
-                    val frame = incoming.receive()
-                    if (frame is Frame.Text) {
-                        val data = frame.readText()
-                        Log.v(TAG, "Received: $data")
+                            val jsonObject = gson.fromJson(data, JsonObject::class.java)
 
-                        val jsonObject = gson.fromJson(data, JsonObject::class.java)
-
-                        launch(Dispatchers.Main) {
-                            if (jsonObject.has("serverUrl")) {
-                                listener.onIceCandidateReceived(gson.fromJson(jsonObject, IceCandidate::class.java))
-                            } else if (jsonObject.has("type") && jsonObject.get("type").asString == "OFFER") {
-                                listener.onOfferReceived(gson.fromJson(jsonObject, SessionDescription::class.java))
-                            } else if (jsonObject.has("type") && jsonObject.get("type").asString == "ANSWER") {
-                                listener.onAnswerReceived(gson.fromJson(jsonObject, SessionDescription::class.java))
+                            launch(Dispatchers.Main) {
+                                if (jsonObject.has("serverUrl")) {
+                                    listener.onIceCandidateReceived(
+                                        gson.fromJson(
+                                            jsonObject,
+                                            IceCandidate::class.java
+                                        )
+                                    )
+                                } else if (jsonObject.has("type") && jsonObject.get("type").asString == "OFFER") {
+                                    listener.onOfferReceived(
+                                        gson.fromJson(
+                                            jsonObject,
+                                            SessionDescription::class.java
+                                        )
+                                    )
+                                } else if (jsonObject.has("type") && jsonObject.get("type").asString == "ANSWER") {
+                                    listener.onAnswerReceived(
+                                        gson.fromJson(
+                                            jsonObject,
+                                            SessionDescription::class.java
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
+                } catch (exception: Throwable) {
+                    Log.e(TAG, "Error...", exception)
                 }
-            } catch (exception: Throwable) {
-                Log.e(TAG,"Error...", exception)
             }
+        } catch (exception: Throwable) {
+            Log.e(TAG, "Holy fuck! ", exception)
         }
-
 
     }
 
@@ -96,9 +114,7 @@ class SignalingClient(private val listener: SignalingClientListener) :
         sendChannel.send(gson.toJson(dataObject))
     }
 
-    fun destroy() = launch {
-        clientSession.close()
+    fun destroy() = runBlocking {
         client.close()
-        cancel()
     }
 }

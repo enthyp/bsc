@@ -1,6 +1,14 @@
 package com.lanecki.deepnoise
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
@@ -10,17 +18,11 @@ import com.lanecki.deepnoise.workers.FMSTokenUpdateWorker
 
 class FMService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        Log.d(TAG, "From: " + remoteMessage.from)
-
-        // Check if message contains a data payload.
         if (remoteMessage.data.isNotEmpty()) {
-            Log.d(
-                TAG,
-                "Message data payload: " + remoteMessage.data
-            )
-            updateState(remoteMessage.data)
-            // TODO: establish WebSocket connection with server
-            // to see what it wants
+            when (remoteMessage.data["type"]) {
+                "incoming call" -> notifyIncomingCall(remoteMessage.data)
+                else -> Log.d(TAG, "Unknown message type: $this")
+            }
         }
     }
 
@@ -38,13 +40,39 @@ class FMService : FirebaseMessagingService() {
         WorkManager.getInstance(this).enqueue(updateTokenRequest)
     }
 
-    private fun updateState(data: Map<String, String>) {
-        // TODO:
-    }
+    private fun notifyIncomingCall(data: MutableMap<String, String>) {
+        val caller = data["caller"]
 
-    override fun onCreate() {
-        super.onCreate()
-        Log.d(TAG, "Service created.")
+        val intent = Intent(this, CallActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            PendingIntent.FLAG_ONE_SHOT
+        )
+
+        val channelId = "default"
+        val notificationBuilder =
+            NotificationCompat.Builder(this, channelId)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("$caller calls")
+                .setAutoCancel(true)
+                .setDefaults(Notification.DEFAULT_ALL)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+
+        val notificationManager =
+            getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "MainChannel",
+                NotificationManager.IMPORTANCE_HIGH
+            )
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        notificationManager.notify(0, notificationBuilder.build())
     }
 
     companion object {

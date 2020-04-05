@@ -51,7 +51,7 @@ async def token_handler(request):
     request.app['tokens'][identity] = token
 
     # Let's try to push a notification to him.
-    await notify(token, {'type': 'incoming', 'caller': 'bob'})
+    await notify(token, {'type': 'incoming call', 'caller': 'bob'})
 
     return web.Response()
 
