@@ -83,6 +83,8 @@ class RTCClient(
         val localStream = peerConnectionFactory.createLocalMediaStream("101")
         localStream.addTrack(localAudioTrack)
         peerConnection?.addStream(localStream)
+
+        val socketIOClient = SocketIOClient()
     }
 
     fun call() {

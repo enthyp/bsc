@@ -5,7 +5,7 @@ import firebase_admin
 from firebase_admin import credentials, messaging
 
 
-async def notify(token, payload):
+async def async_notify(token, payload):
     message = messaging.Message(
         data=payload,
         token=token
@@ -16,6 +16,14 @@ async def notify(token, payload):
        None, lambda: messaging.send(message)
     )
     logging.info('Notified!')
+
+
+def notify(token, payload):
+    message = messaging.Message(
+        data=payload,
+        token=token
+    )
+    messaging.send(message)
 
 
 def setup_notifications():

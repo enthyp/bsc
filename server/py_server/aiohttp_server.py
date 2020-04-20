@@ -5,7 +5,7 @@ import sys
 import uuid
 from aiohttp import web
 
-from notifications import notify, setup_notifications
+from notifications import async_notify, setup_notifications
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
@@ -53,7 +53,7 @@ async def token_handler(request):
 
     # Let's try to push a notification to him.
     await asyncio.sleep(2)
-    await notify(token, {'type': 'incoming call', 'caller': 'bob'})
+    await async_notify(token, {'type': 'incoming call', 'caller': 'bob'})
 
     return web.Response()
 
