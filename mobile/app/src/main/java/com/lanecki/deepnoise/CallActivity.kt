@@ -1,6 +1,7 @@
 package com.lanecki.deepnoise
 
 import android.Manifest
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
@@ -9,6 +10,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.preference.PreferenceManager
 import com.lanecki.deepnoise.call.CallHandler
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
 import org.tensorflow.lite.Interpreter
@@ -18,6 +20,7 @@ import java.io.IOException
 import java.nio.MappedByteBuffer
 
 
+// TODO: use some Android config instead of hardcoding!
 class CallActivity : AppCompatActivity() {
 
     companion object {
@@ -38,15 +41,30 @@ class CallActivity : AppCompatActivity() {
         binding = ActivityCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.callButton.setOnClickListener { callHandler.call() }
-        checkAudioPermission()
-
-        try{
+        try {
             tfliteModel = FileUtil.loadMappedFile(this, "identity_model.tflite")
             tflite = Interpreter(tfliteModel)
         } catch (e: IOException){
             Log.e("tfliteSupport", "Error reading model", e);
         }
+
+        val sharedPreferences: SharedPreferences =
+            PreferenceManager.getDefaultSharedPreferences(this)
+
+        // TODO: can't be hardcoded!
+        val nick = sharedPreferences.getString("nick", "") ?: ""
+        val serverAddress = sharedPreferences.getString("server_address", "") ?: ""
+        callHandler = CallHandler(
+            nick,
+            serverAddress,
+            audioCallback(),
+            application
+        )
+
+        // TODO: remove that, introduce two layouts (fragments) for incoming and outgoing calls
+        binding.callButton.setOnClickListener { callHandler.call() }
+
+        checkAudioPermission()
     }
 
     private fun checkAudioPermission() {
@@ -68,10 +86,7 @@ class CallActivity : AppCompatActivity() {
     }
 
     private fun onAudioPermissionGranted() {
-        callHandler = CallHandler(
-            audioCallback(),
-            application
-        )
+        // TODO: callHandler.call()
     }
 
     private fun requestAudioPermission(dialogShown: Boolean = false) {

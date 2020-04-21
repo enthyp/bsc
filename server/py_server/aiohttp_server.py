@@ -68,7 +68,7 @@ def main():
         web.post('/token', token_handler)
     ])
 
-    web.run_app(app, host='192.168.100.106', port=5000)
+    web.run_app(app, host='192.168.100.106', port=5001)
 
 
 if __name__ == '__main__':

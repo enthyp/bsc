@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit
 
 // TODO: handle exceptions (failed to connect, ...)
 class WSClient(
+    private val serverAddress: String,
     private val listener: SignallingListener,
     private val lifecycle: Lifecycle
 ) :
@@ -36,8 +37,10 @@ class WSClient(
     private val receiveChannel: ReceiveChannel<Any>
 
     init {
+        val address = if (serverAddress != "") serverAddress else SERVER_ADDRESS
+
         socket = Scarlet.Builder()
-            .webSocketFactory(httpClient.newWebSocketFactory(HOST_ADDRESS))
+            .webSocketFactory(httpClient.newWebSocketFactory(address))
             .addMessageAdapterFactory(GsonMessageAdapter.Factory())
             .addStreamAdapterFactory(CoroutinesStreamAdapterFactory())
             .backoffStrategy(backoffStrategy)
@@ -85,7 +88,7 @@ class WSClient(
     }
 
     companion object {
-        private const val HOST_ADDRESS = "ws://192.168.100.106:5000"  // TODO: in Settings panel
+        private const val SERVER_ADDRESS = "ws://192.168.100.106:5000"  // TODO: in Settings panel
 
         private const val SIGNAL_TYPE = "signal_type"
         private const val PAYLOAD = "payload"

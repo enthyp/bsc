@@ -9,6 +9,8 @@ import org.webrtc.voiceengine.WebRtcAudioUtils
 
 // TODO: this must be running in the background thread!
 class CallHandler(
+    private val nickname: String,
+    private val serverAddress: String,
     private val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback,
     private val context: Context
     ) : SignallingListener {
@@ -18,7 +20,7 @@ class CallHandler(
 
     init {
         lifecycle.start()
-        wsClient = WSClient(this, lifecycle)
+        wsClient = WSClient(serverAddress, this, lifecycle)
     }
 
     private val iceServer = listOf(

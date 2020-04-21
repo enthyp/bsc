@@ -17,6 +17,7 @@ import com.lanecki.deepnoise.adapters.MainPagerAdapter
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.android.material.tabs.TabLayoutMediator
 import com.google.firebase.iid.FirebaseInstanceId
+import com.lanecki.deepnoise.settings.SettingsActivity
 import com.lanecki.deepnoise.workers.FMSTokenUpdateWorker
 
 class MainActivity : AppCompatActivity() {
