@@ -5,4 +5,5 @@
         <item>Kontakty</item>
         <item>Połączenia</item>
     </string-array>
+    <string name="settings">Ustawienia</string>
 </resources>

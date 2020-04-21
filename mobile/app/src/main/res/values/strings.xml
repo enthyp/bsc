@@ -1,9 +1,10 @@
 <resources>
     <string name="app_name">DeepNoise</string>
-    <string name="callee">com.lanecki.deepnoise.extra.CALLEE</string>
+    <string name="callee" translatable="false">com.lanecki.deepnoise.extra.CALLEE</string>
     <string-array name="tab_names">
         <item>Contacts</item>
         <item>Recent</item>
     </string-array>
+    <string name="settings">Settings</string>
 
 </resources>
