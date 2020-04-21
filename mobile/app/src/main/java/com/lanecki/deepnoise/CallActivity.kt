@@ -9,7 +9,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.lanecki.deepnoise.call.RTCClient
+import com.lanecki.deepnoise.call.CallHandler
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
@@ -27,7 +27,7 @@ class CallActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityCallBinding
-    private lateinit var rtcClient: RTCClient
+    private lateinit var callHandler: CallHandler
     private lateinit var tfliteModel: MappedByteBuffer
     private lateinit var tflite: Interpreter
     private var inBuffer: FloatArray = FloatArray(BUFFER_SIZE)
@@ -38,7 +38,7 @@ class CallActivity : AppCompatActivity() {
         binding = ActivityCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.callButton.setOnClickListener { rtcClient.call() }
+        binding.callButton.setOnClickListener { callHandler.call() }
         checkAudioPermission()
 
         try{
@@ -68,7 +68,7 @@ class CallActivity : AppCompatActivity() {
     }
 
     private fun onAudioPermissionGranted() {
-        rtcClient = RTCClient(
+        callHandler = CallHandler(
             audioCallback(),
             application
         )
@@ -111,7 +111,7 @@ class CallActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        rtcClient.destroy()
         super.onDestroy()
+        callHandler.shutdown()
     }
 }

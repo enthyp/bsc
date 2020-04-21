@@ -20,8 +20,6 @@ async def websocket_handler(request):
 
     try:
         async for msg in ws:
-            logging.debug(msg.data)
-
             if msg.type == aiohttp.WSMsgType.TEXT:
                 for c_id, c_ws in request.app['clients'].items():
                     if c_id != this:

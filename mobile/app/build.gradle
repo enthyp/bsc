@@ -74,11 +74,13 @@ dependencies {
     implementation("io.ktor:ktor-client-cio:1.3.2")
     implementation("io.ktor:ktor-client-gson:1.3.2")
 
-    // Socket.IO
-    implementation ('io.socket:socket.io-client:1.0.0') {
-        // excluding org.json which is provided by Android
-        exclude group: 'org.json', module: 'json'
-    }
+    // Tinder WebSockets
+    def scarlet_version = "0.1.9"
+    implementation "com.tinder.scarlet:scarlet:$scarlet_version"
+    implementation "com.tinder.scarlet:stream-adapter-coroutines:$scarlet_version"
+    implementation "com.tinder.scarlet:websocket-okhttp:$scarlet_version"
+    implementation "com.tinder.scarlet:message-adapter-gson:$scarlet_version"
+    implementation "com.tinder.scarlet:lifecycle-android:$scarlet_version"
 
     // Firebase Cloud Messaging
     implementation 'com.google.firebase:firebase-analytics:17.2.2'

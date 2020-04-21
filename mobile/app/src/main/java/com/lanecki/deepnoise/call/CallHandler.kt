@@ -2,24 +2,25 @@ package com.lanecki.deepnoise.call
 
 import android.content.Context
 import android.util.Log
-import com.google.gson.Gson
-import io.ktor.util.KtorExperimentalAPI
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
 import org.webrtc.voiceengine.WebRtcAudioUtils
 
 
-class RTCClient(
+// TODO: this must be running in the background thread!
+class CallHandler(
     private val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback,
-    private val context: Context)
-    : SignalingClientListener {
+    private val context: Context
+) : SignallingListener {
 
-    private val TAG = "RTCClient"
+    private val wsClient: WSClient = WSClient(this)
 
     private val iceServer = listOf(
-        PeerConnection.IceServer.builder("stun:stun.l.google.com:19302")
+        PeerConnection.IceServer
+            .builder("stun:stun.l.google.com:19302")
             .createIceServer()
     )
+
     private val peerConnectionFactory: PeerConnectionFactory by lazy {
         buildPeerConnectionFactory(context)
     }
@@ -27,14 +28,10 @@ class RTCClient(
         buildPeerConnection()
     }
 
-    @KtorExperimentalAPI
-    private var signalingClient = SignalingClient(this)
-
     private fun buildPeerConnectionFactory(context: Context): PeerConnectionFactory {
         // Initialize PeerConnectionFactory options.
         val options = PeerConnectionFactory.InitializationOptions.builder(context)
             .setEnableInternalTracer(true)
-            .setFieldTrials("WebRTC-H264HighProfile/Enabled/")
             .createInitializationOptions()
         PeerConnectionFactory.initialize(options)
 
@@ -57,7 +54,7 @@ class RTCClient(
         val observer = object : PeerConnectionObserver() {
             override fun onIceCandidate(p0: IceCandidate?) {
                 super.onIceCandidate(p0)
-                signalingClient.send(p0)
+                p0?.let { wsClient.send(WSClient.ICE_CANDIDATE, p0) }
                 onIceCandidateReceived(p0!!)
                 Log.d(TAG, "ICE candidate from PeerConnection")
             }
@@ -84,7 +81,7 @@ class RTCClient(
         localStream.addTrack(localAudioTrack)
         peerConnection?.addStream(localStream)
 
-        val socketIOClient = SocketIOClient()
+        wsClient.receive()
     }
 
     fun call() {
@@ -97,7 +94,7 @@ class RTCClient(
                 peerConnection?.setLocalDescription(object : AppSdpObserver() {
                     override fun onSetSuccess() {
                         super.onSetSuccess()
-                        signalingClient.send(p0)
+                        p0?.let {wsClient.send(WSClient.OFFER, p0) }
                         Log.d(TAG, "Offer created in call.")
                     }
                 }, p0)
@@ -116,7 +113,7 @@ class RTCClient(
                 peerConnection?.setLocalDescription(object : AppSdpObserver() {
                     override fun onSetSuccess() {
                         super.onSetSuccess()
-                        signalingClient.send(p0)
+                        p0?.let { wsClient.send(WSClient.ANSWER, p0) }
                         Log.d(TAG, "Answer created in answer.")
                     }
                 }, p0)
@@ -137,7 +134,7 @@ class RTCClient(
             }
             override fun onCreateSuccess(p0: SessionDescription?) {
                 super.onCreateSuccess(p0)
-                Log.d(TAG, "Remote creatset successfully")
+                Log.d(TAG, "Remote created successfully")
                 answer()
             }
             override fun onSetSuccess() {
@@ -158,7 +155,11 @@ class RTCClient(
         peerConnection?.setRemoteDescription(AppSdpObserver(), sessionDescription)
     }
 
-    fun destroy() {
-        signalingClient.destroy()
+    fun shutdown() {
+        wsClient.close()
+    }
+
+    companion object {
+        private const val TAG = "CallHandler"
     }
 }
