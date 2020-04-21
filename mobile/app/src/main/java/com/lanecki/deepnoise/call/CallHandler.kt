@@ -2,18 +2,24 @@ package com.lanecki.deepnoise.call
 
 import android.content.Context
 import android.util.Log
+import com.lanecki.deepnoise.utils.InjectionUtils
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
 import org.webrtc.voiceengine.WebRtcAudioUtils
-
 
 // TODO: this must be running in the background thread!
 class CallHandler(
     private val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback,
     private val context: Context
-) : SignallingListener {
+    ) : SignallingListener {
 
-    private val wsClient: WSClient = WSClient(this)
+    private val lifecycle: CallLifecycle = InjectionUtils.provideCallLifecycle()
+    private val wsClient: WSClient
+
+    init {
+        lifecycle.start()
+        wsClient = WSClient(this, lifecycle)
+    }
 
     private val iceServer = listOf(
         PeerConnection.IceServer
@@ -156,7 +162,7 @@ class CallHandler(
     }
 
     fun shutdown() {
-        wsClient.close()
+        lifecycle.stop()
     }
 
     companion object {

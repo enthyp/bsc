@@ -1,6 +1,7 @@
 package com.lanecki.deepnoise.call
 
 import com.google.gson.Gson
+import com.tinder.scarlet.Lifecycle
 import com.tinder.scarlet.Scarlet
 import com.tinder.scarlet.messageadapter.gson.GsonMessageAdapter
 import com.tinder.scarlet.retry.ExponentialWithJitterBackoffStrategy
@@ -8,6 +9,7 @@ import com.tinder.scarlet.websocket.okhttp.newWebSocketFactory
 import com.tinder.streamadapter.coroutines.CoroutinesStreamAdapterFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -15,7 +17,11 @@ import org.webrtc.IceCandidate
 import org.webrtc.SessionDescription
 import java.util.concurrent.TimeUnit
 
-class WSClient(private val listener: SignallingListener) :
+// TODO: handle exceptions (failed to connect, ...)
+class WSClient(
+    private val listener: SignallingListener,
+    private val lifecycle: Lifecycle
+) :
     CoroutineScope by CoroutineScope(Dispatchers.IO) {
 
     private val backoffStrategy = ExponentialWithJitterBackoffStrategy(5000, 5000)
@@ -26,15 +32,21 @@ class WSClient(private val listener: SignallingListener) :
         .writeTimeout(10, TimeUnit.SECONDS)
         .build()
 
-    private val socket = Scarlet.Builder()
-        .webSocketFactory(httpClient.newWebSocketFactory(HOST_ADDRESS))
-        .addMessageAdapterFactory(GsonMessageAdapter.Factory())
-        .addStreamAdapterFactory(CoroutinesStreamAdapterFactory())
-        .backoffStrategy(backoffStrategy)
-        .build()
-        .create<WSApi>()
+    private val socket: WSApi
+    private val receiveChannel: ReceiveChannel<Any>
 
-    private val receiveChannel = socket.receiveSignal()
+    init {
+        socket = Scarlet.Builder()
+            .webSocketFactory(httpClient.newWebSocketFactory(HOST_ADDRESS))
+            .addMessageAdapterFactory(GsonMessageAdapter.Factory())
+            .addStreamAdapterFactory(CoroutinesStreamAdapterFactory())
+            .backoffStrategy(backoffStrategy)
+            .lifecycle(lifecycle)
+            .build()
+            .create()
+
+        receiveChannel = socket.receiveSignal()
+    }
 
     fun send(type: String, data: Any) = launch {
         val jsonData = gson.toJson(data)
@@ -70,10 +82,6 @@ class WSClient(private val listener: SignallingListener) :
                 }
             }
         }
-    }
-
-    fun close() {
-        // TODO: how to clean it up??
     }
 
     companion object {
