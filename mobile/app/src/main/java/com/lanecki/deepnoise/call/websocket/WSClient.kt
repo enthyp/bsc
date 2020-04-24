@@ -1,6 +1,8 @@
-package com.lanecki.deepnoise.call
+package com.lanecki.deepnoise.call.websocket
 
 import com.google.gson.Gson
+import com.lanecki.deepnoise.CallActivity
+import com.lanecki.deepnoise.call.SignallingListener
 import com.tinder.scarlet.Lifecycle
 import com.tinder.scarlet.Scarlet
 import com.tinder.scarlet.messageadapter.gson.GsonMessageAdapter
@@ -20,7 +22,7 @@ import java.util.concurrent.TimeUnit
 // TODO: handle exceptions (failed to connect, ...)
 class WSClient(
     private val serverAddress: String,
-    private val listener: SignallingListener,
+    private val listener: WSEventListener,
     private val lifecycle: Lifecycle
 ) :
     CoroutineScope by CoroutineScope(Dispatchers.IO) {
@@ -87,6 +89,15 @@ class WSClient(
         }
     }
 
+    enum class Type {
+        CALL,
+        ACCEPTED,
+        REFUSED,
+        OFFER,
+        ANSWER,
+        ICE_CANDIDATE
+    }
+
     companion object {
         private const val SERVER_ADDRESS = "ws://192.168.100.106:5000"  // TODO: in Settings panel
 
@@ -96,4 +107,12 @@ class WSClient(
         const val ANSWER = "answer"
         const val ICE_CANDIDATE = "ice_candidate"
     }
+}
+
+interface WSEventListener {
+    fun onAccepted()
+    fun onRefused()
+    fun onIceCandidateReceived(candidate: IceCandidate)
+    fun onOfferReceived(sessionDescription: SessionDescription)
+    fun onAnswerReceived(sessionDescription: SessionDescription)
 }

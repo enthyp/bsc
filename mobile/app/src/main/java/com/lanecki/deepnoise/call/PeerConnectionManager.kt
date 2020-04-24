@@ -2,26 +2,15 @@ package com.lanecki.deepnoise.call
 
 import android.content.Context
 import android.util.Log
-import com.lanecki.deepnoise.utils.InjectionUtils
+import com.lanecki.deepnoise.call.websocket.WSClient
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
 import org.webrtc.voiceengine.WebRtcAudioUtils
 
-// TODO: this must be running in the background thread!
-class CallHandler(
-    private val nickname: String,
-    private val serverAddress: String,
-    private val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback,
-    private val context: Context
-    ) : SignallingListener {
-
-    private val lifecycle: CallLifecycle = InjectionUtils.provideCallLifecycle()
-    private val wsClient: WSClient
-
-    init {
-        lifecycle.start()
-        wsClient = WSClient(serverAddress, this, lifecycle)
-    }
+class PeerConnectionManager(
+    private val context: Context,
+    private val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback
+) : SignallingListener {
 
     private val iceServer = listOf(
         PeerConnection.IceServer
@@ -32,6 +21,7 @@ class CallHandler(
     private val peerConnectionFactory: PeerConnectionFactory by lazy {
         buildPeerConnectionFactory(context)
     }
+
     private val peerConnection: PeerConnection? by lazy {
         buildPeerConnection()
     }
@@ -88,8 +78,6 @@ class CallHandler(
         val localStream = peerConnectionFactory.createLocalMediaStream("101")
         localStream.addTrack(localAudioTrack)
         peerConnection?.addStream(localStream)
-
-        wsClient.receive()
     }
 
     fun call() {
@@ -102,7 +90,7 @@ class CallHandler(
                 peerConnection?.setLocalDescription(object : AppSdpObserver() {
                     override fun onSetSuccess() {
                         super.onSetSuccess()
-                        p0?.let {wsClient.send(WSClient.OFFER, p0) }
+                        p0?.let { wsClient.send(WSClient.OFFER, p0) }
                         Log.d(TAG, "Offer created in call.")
                     }
                 }, p0)
@@ -128,6 +116,7 @@ class CallHandler(
             }
         }, constraints)
     }
+
 
     override fun onIceCandidateReceived(iceCandidate: IceCandidate) {
         peerConnection?.addIceCandidate(iceCandidate)
@@ -163,11 +152,51 @@ class CallHandler(
         peerConnection?.setRemoteDescription(AppSdpObserver(), sessionDescription)
     }
 
-    fun shutdown() {
-        lifecycle.stop()
-    }
-
     companion object {
-        private const val TAG = "CallHandler"
+        private const val TAG = "PeerConnectionManager"
     }
+}
+
+// WebRTC-related listeners.
+
+interface SignallingListener {
+    fun onIceCandidateReceived(iceCandidate: IceCandidate)
+
+    fun onOfferReceived(sessionDescription: SessionDescription)
+
+    fun onAnswerReceived(sessionDescription: SessionDescription)
+}
+
+open class PeerConnectionObserver : PeerConnection.Observer {
+    override fun onIceCandidate(p0: IceCandidate?) {}
+
+    override fun onDataChannel(p0: DataChannel?) {}
+
+    override fun onIceConnectionReceivingChange(p0: Boolean) {}
+
+    override fun onIceConnectionChange(p0: PeerConnection.IceConnectionState?) {}
+
+    override fun onIceGatheringChange(p0: PeerConnection.IceGatheringState?) {}
+
+    override fun onAddStream(p0: MediaStream?) {}
+
+    override fun onSignalingChange(p0: PeerConnection.SignalingState?) {}
+
+    override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {}
+
+    override fun onRemoveStream(p0: MediaStream?) {}
+
+    override fun onRenegotiationNeeded() {}
+
+    override fun onAddTrack(p0: RtpReceiver?, p1: Array<out MediaStream>?) {}
+}
+
+open class AppSdpObserver : SdpObserver {
+    override fun onSetFailure(p0: String?) {}
+
+    override fun onSetSuccess() {}
+
+    override fun onCreateSuccess(p0: SessionDescription?) {}
+
+    override fun onCreateFailure(p0: String?) {}
 }

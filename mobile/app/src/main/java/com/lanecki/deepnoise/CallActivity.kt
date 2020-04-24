@@ -11,42 +11,18 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
-import com.lanecki.deepnoise.call.CallHandler
+import com.lanecki.deepnoise.call.CallManager
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
-import org.tensorflow.lite.Interpreter
-import org.tensorflow.lite.support.common.FileUtil
-import org.webrtc.audio.JavaAudioDeviceModule
-import java.io.IOException
-import java.nio.MappedByteBuffer
-
 
 // TODO: use some Android config instead of hardcoding!
 class CallActivity : AppCompatActivity() {
 
-    companion object {
-        private const val AUDIO_PERMISSION_REQUEST_CODE = 1
-        private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
-        private const val BUFFER_SIZE = 441  // number of samples
-    }
-
-    private lateinit var binding: ActivityCallBinding
-    private lateinit var callHandler: CallHandler
-    private lateinit var tfliteModel: MappedByteBuffer
-    private lateinit var tflite: Interpreter
-    private var inBuffer: FloatArray = FloatArray(BUFFER_SIZE)
-    private var outBuffer: Array<FloatArray> = arrayOf(FloatArray(BUFFER_SIZE))
+    private lateinit var callManager: CallManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityCallBinding.inflate(layoutInflater)
+        val binding = ActivityCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        try {
-            tfliteModel = FileUtil.loadMappedFile(this, "identity_model.tflite")
-            tflite = Interpreter(tfliteModel)
-        } catch (e: IOException){
-            Log.e("tfliteSupport", "Error reading model", e);
-        }
 
         val sharedPreferences: SharedPreferences =
             PreferenceManager.getDefaultSharedPreferences(this)
@@ -54,16 +30,6 @@ class CallActivity : AppCompatActivity() {
         // TODO: can't be hardcoded!
         val nick = sharedPreferences.getString("nick", "") ?: ""
         val serverAddress = sharedPreferences.getString("server_address", "") ?: ""
-        callHandler = CallHandler(
-            nick,
-            serverAddress,
-            audioCallback(),
-            application
-        )
-
-        // TODO: remove that, introduce two layouts (fragments) for incoming and outgoing calls
-        binding.callButton.setOnClickListener { callHandler.call() }
-
         checkAudioPermission()
     }
 
@@ -75,26 +41,20 @@ class CallActivity : AppCompatActivity() {
         }
     }
 
-    private fun audioCallback() = JavaAudioDeviceModule.AudioTrackProcessingCallback {
-        for (i in 0 until BUFFER_SIZE)
-            inBuffer[i] = it.getShort(2 * i).toFloat()
-
-        tflite.run(inBuffer, outBuffer)
-
-        for (i in 0 until BUFFER_SIZE)
-            it.putShort(2 * i, outBuffer[0][i].toShort())
-    }
-
-    private fun onAudioPermissionGranted() {
-        // TODO: callHandler.call()
-    }
-
     private fun requestAudioPermission(dialogShown: Boolean = false) {
         if (ActivityCompat.shouldShowRequestPermissionRationale(this, AUDIO_PERMISSION) && !dialogShown) {
             showPermissionRationaleDialog()
         } else {
             ActivityCompat.requestPermissions(this, arrayOf(AUDIO_PERMISSION), AUDIO_PERMISSION_REQUEST_CODE)
         }
+    }
+
+    private fun onAudioPermissionGranted() {
+        callManager = CallManager(
+            nick,
+            serverAddress,
+            application
+        )
     }
 
     private fun showPermissionRationaleDialog() {
@@ -127,6 +87,19 @@ class CallActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        callHandler.shutdown()
+        callManager.shutdown()
+    }
+
+    enum class State {
+        INCOMING,
+        OUTGOING
+    }
+
+    companion object {
+        const val CALLEE_KEY = "CALLEE"
+        const val INITIAL_STATE_KEY = "INITIAL_STATE"
+
+        private const val AUDIO_PERMISSION_REQUEST_CODE = 1
+        private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
     }
 }
