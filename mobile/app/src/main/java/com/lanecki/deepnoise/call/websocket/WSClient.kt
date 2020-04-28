@@ -1,15 +1,17 @@
 package com.lanecki.deepnoise.call.websocket
 
+import android.util.Log
 import com.google.gson.Gson
 import com.tinder.scarlet.Lifecycle
 import com.tinder.scarlet.Scarlet
+import com.tinder.scarlet.WebSocket
 import com.tinder.scarlet.messageadapter.gson.GsonMessageAdapter
 import com.tinder.scarlet.retry.ExponentialWithJitterBackoffStrategy
 import com.tinder.scarlet.websocket.okhttp.newWebSocketFactory
 import com.tinder.streamadapter.coroutines.CoroutinesStreamAdapterFactory
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import okhttp3.OkHttpClient
 import org.webrtc.IceCandidate
 import org.webrtc.SessionDescription
@@ -36,6 +38,8 @@ class WSClient(
         .build()
 
     private val socket: WSApi
+    private val sendChannel = Channel<Pair<MsgType, Any?>>()
+    private val wsEventChannel: ReceiveChannel<WebSocket.Event>
 
     init {
         val address = if (serverAddress != "") serverAddress else SERVER_ADDRESS
@@ -48,20 +52,34 @@ class WSClient(
             .lifecycle(lifecycle)
             .build()
             .create()
+
+        wsEventChannel = socket.receiveWebSocketEvent()
     }
 
-    override suspend fun send(type: MsgType, data: Any?) {
-        val jsonData = withContext(Dispatchers.Main) { gson.toJson(data) }
+    suspend fun ensureOpened() {
+        // TODO: I really should make all this event-driven, this sucks!
+
+        loop@ while (true) {
+            when(wsEventChannel.receive()) {
+                is WebSocket.Event.OnConnectionOpened<*> -> break@loop
+                else -> continue@loop
+            }
+        }
+    }
+
+    override suspend fun send(type: MsgType, data: Any?) = withContext(this.coroutineContext) {
+        val jsonData = gson.toJson(data)
         val msg = WSMessage(type, jsonData)
-        val json =  withContext(Dispatchers.Main) { gson.toJson(msg) }
+        val json = gson.toJson(msg)
         socket.sendSignal(json)
+        // TODO: use GsonMessageAdapter for serialization somehow
     }
 
-    override suspend fun receive(listener: WSListener) {
+    override suspend fun receive(listener: WSListener) = withContext(this.coroutineContext) {
         val receiveChannel = socket.receiveSignal()
 
         while (true) {
-            val json = receiveChannel.receive() as String
+            val json = receiveChannel.receive()
 
             withContext(Dispatchers.Default) {
                 val msg: WSMessage = gson.fromJson(json, WSMessage::class.java)

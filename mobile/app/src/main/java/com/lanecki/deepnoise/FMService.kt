@@ -11,13 +11,14 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.lanecki.deepnoise.call.CallState
 import com.lanecki.deepnoise.workers.FMSTokenUpdateWorker
 
 class FMService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         if (remoteMessage.data.isNotEmpty()) {
             when (remoteMessage.data["type"]) {
-                "incoming call" -> notifyIncomingCall(remoteMessage.data)
+                "incoming" -> notifyIncomingCall(remoteMessage.data)
                 else -> Log.d(TAG, "Unknown message type: $this")
             }
         }
@@ -40,7 +41,10 @@ class FMService : FirebaseMessagingService() {
     private fun notifyIncomingCall(data: MutableMap<String, String>) {
         val caller = data["caller"]
 
-        val intent = Intent(this, CallActivity::class.java)
+        val intent = Intent(this, CallActivity::class.java).apply {
+            putExtra(CallActivity.CALLEE_KEY, caller)
+            putExtra(CallActivity.INITIAL_STATE_KEY, CallState.INCOMING)
+        }
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,
             PendingIntent.FLAG_UPDATE_CURRENT

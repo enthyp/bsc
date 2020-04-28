@@ -71,7 +71,7 @@ dependencies {
     implementation 'com.squareup.retrofit2:converter-gson:2.6.0'
 
     // Tinder WebSockets
-    def scarlet_version = "0.1.9"
+    def scarlet_version = "0.1.10"
     implementation "com.tinder.scarlet:scarlet:$scarlet_version"
     implementation "com.tinder.scarlet:stream-adapter-coroutines:$scarlet_version"
     implementation "com.tinder.scarlet:websocket-okhttp:$scarlet_version"

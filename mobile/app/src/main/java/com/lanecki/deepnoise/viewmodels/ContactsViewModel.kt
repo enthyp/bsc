@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 
 class ContactsViewModel : ViewModel() {
 
-    private val contacts: List<String> = listOf("XD", "LOL")
+    private val contacts: List<String> = listOf("Tablet", "Telefon")
 
     fun getContacts() = contacts
 }

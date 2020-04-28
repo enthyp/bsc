@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -15,7 +16,9 @@ import com.lanecki.deepnoise.call.CallManager
 import com.lanecki.deepnoise.call.CallState
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
 import com.lanecki.deepnoise.settings.SettingsActivity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // TODO: use some Android config instead of hardcoding!
 class CallActivity : AppCompatActivity(), CallUI {
@@ -30,8 +33,12 @@ class CallActivity : AppCompatActivity(), CallUI {
         // Initialize CallManager.
         val sharedPreferences: SharedPreferences =
             PreferenceManager.getDefaultSharedPreferences(this)
-        val nick = sharedPreferences.getString(SettingsActivity.NICK_KEY, "") ?: ""
-        val serverAddress = sharedPreferences.getString(SettingsActivity.SERVER_ADDRESS_KEY, "") ?: ""
+
+        val nickKey = resources.getString(R.string.settings_nick)
+        val serverAddressKey = resources.getString(R.string.settings_server_address)
+
+        val nick = sharedPreferences.getString(nickKey, "") ?: ""
+        val serverAddress = sharedPreferences.getString(serverAddressKey, "") ?: ""
 
         val initState = intent.getSerializableExtra(INITIAL_STATE_KEY) as CallState
         val callee = intent.getSerializableExtra(CALLEE_KEY) as String
@@ -66,7 +73,7 @@ class CallActivity : AppCompatActivity(), CallUI {
     }
 
     private fun onAudioPermissionGranted() {
-        callManager.run()
+        lifecycleScope.launch { callManager.run() }
     }
 
     private fun showPermissionRationaleDialog() {

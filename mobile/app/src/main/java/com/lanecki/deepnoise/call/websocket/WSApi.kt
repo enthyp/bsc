@@ -7,11 +7,11 @@ import kotlinx.coroutines.channels.ReceiveChannel
 
 interface WSApi {
     @Send
-    fun sendSignal(data: Any)
+    fun sendSignal(data: String)
 
     @Receive
-    fun receiveSignal(): ReceiveChannel<Any>
+    fun receiveSignal(): ReceiveChannel<String>
 
     @Receive
-    fun receiveWebSocketEvent(): ReceiveChannel<WebSocket.Event>  // TODO: use it...
+    fun receiveWebSocketEvent(): ReceiveChannel<WebSocket.Event>
 }

@@ -3,12 +3,12 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <EditTextPreference
-        app:key="nick"
+        app:key="@string/settings_nick"
         app:title="Nickname"
         app:summary="Set nickname"/>
 
     <EditTextPreference
-        app:key="server_address"
+        app:key="@string/settings_server_address"
         app:title="Server address"
         app:summary="Set address of the server"/>
 

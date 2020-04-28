@@ -5,10 +5,7 @@ import android.util.Log
 import com.lanecki.deepnoise.CallUI
 import com.lanecki.deepnoise.call.websocket.*
 import com.lanecki.deepnoise.utils.InjectionUtils
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
 import org.webrtc.IceCandidate
@@ -45,7 +42,6 @@ class CallManager(
     private lateinit var tflite: Interpreter
     private lateinit var peerConnectionManager: PeerConnectionManager  // TODO: this sucks
 
-
     init {
         lifecycle.start()
         wsClient = WSClient(serverAddress, lifecycle)
@@ -59,10 +55,11 @@ class CallManager(
     }
 
     // Implement WSListener interface.
-    fun run() {
+    suspend fun run() = withContext(this.coroutineContext) {
+        wsClient.ensureOpened()
         launch { wsClient.receive(this@CallManager) }
 
-        if (state == CallState.INCOMING) {
+        if (state == CallState.OUTGOING) {
             state = CallState.AWAITING_RESPONSE
             launch { wsClient.send(MsgType.CALL, CallMsg(nickname, callee)) }
         } else {

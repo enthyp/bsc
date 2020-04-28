@@ -6,5 +6,7 @@
         <item>Recent</item>
     </string-array>
     <string name="settings">Settings</string>
+    <string name="settings_nick" translatable="false">nick_key</string>
+    <string name="settings_server_address" translatable="false">server_address_key</string>
 
 </resources>
