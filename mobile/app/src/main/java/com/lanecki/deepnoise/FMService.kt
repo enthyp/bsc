@@ -6,13 +6,10 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.lanecki.deepnoise.api.BackendService
 import com.lanecki.deepnoise.call.CallState
-import com.lanecki.deepnoise.workers.FMSTokenUpdateWorker
 
 class FMService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
@@ -30,17 +27,14 @@ class FMService : FirebaseMessagingService() {
     }
 
     private fun sendRegistrationToServer(token: String) {
-        // TODO: handle constants better
-        val inputData = workDataOf("identity" to "client", "token" to token)
-        val updateTokenRequest = OneTimeWorkRequestBuilder<FMSTokenUpdateWorker>()
-            .setInputData(inputData)
-            .build()
-        WorkManager.getInstance(this).enqueue(updateTokenRequest)
+        val backendService = BackendService.getInstance()
+        backendService.scheduleTokenUpdate(this, token)
     }
 
     private fun notifyIncomingCall(data: MutableMap<String, String>) {
         val caller = data["caller"]
 
+        // TODO: give the user some choice. Also, it's no good on the tablet...
         val intent = Intent(this, CallActivity::class.java).apply {
             putExtra(CallActivity.CALLEE_KEY, caller)
             putExtra(CallActivity.INITIAL_STATE_KEY, CallState.INCOMING)

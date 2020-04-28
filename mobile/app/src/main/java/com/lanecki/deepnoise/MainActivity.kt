@@ -9,16 +9,13 @@ import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.viewpager2.widget.ViewPager2
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import com.lanecki.deepnoise.databinding.ActivityMainBinding
 import com.lanecki.deepnoise.adapters.MainPagerAdapter
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.android.material.tabs.TabLayoutMediator
 import com.google.firebase.iid.FirebaseInstanceId
+import com.lanecki.deepnoise.api.BackendService
 import com.lanecki.deepnoise.settings.SettingsActivity
-import com.lanecki.deepnoise.workers.FMSTokenUpdateWorker
 
 class MainActivity : AppCompatActivity() {
 
@@ -38,20 +35,15 @@ class MainActivity : AppCompatActivity() {
 
                     // Get new Instance ID token
                     val token = task.result?.token
+                    token?.let {
+                        // TODO: error handling
+                        val backendService = BackendService.getInstance()
+                        backendService.scheduleTokenUpdate(this@MainActivity, token)
 
-                    // Send to server.
-                    // TODO: method in FMService?
-                    // TODO: handle failure?
-                    val inputData = workDataOf("identity" to "client", "token" to token)
-                    val updateTokenRequest = OneTimeWorkRequestBuilder<FMSTokenUpdateWorker>()
-                        .setInputData(inputData)
-                        .build()
-                    WorkManager.getInstance(this).enqueue(updateTokenRequest)
-
-                    // Log and toast
-                    val msg = "Token sending scheduled."
-                    Log.d(TAG, msg)
-                    Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
+                        val msg = "Token sending scheduled."
+                        Log.d(TAG, msg)
+                        Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
+                    }
                 })
         }
 

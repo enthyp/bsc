@@ -21,8 +21,8 @@ class FMSTokenUpdateWorker(
         val token = inputData.getString("token")
 
         if (identity != null && token != null) {
-            val backendService = BackendService.newInstance()
-            val response = backendService.updateToken(Token(identity, token))
+            val backendService = BackendService.getInstance()
+            val response = backendService.scheduleTokenUpdate(Token(identity, token))
 
             Log.d(TAG, response.message.toString())
             when (response.status) {

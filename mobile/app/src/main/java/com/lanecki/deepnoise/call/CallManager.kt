@@ -56,7 +56,7 @@ class CallManager(
 
     // Implement WSListener interface.
     suspend fun run() = withContext(this.coroutineContext) {
-        wsClient.ensureOpened()
+        wsClient.sendNickname(nickname)
         launch { wsClient.receive(this@CallManager) }
 
         if (state == CallState.OUTGOING) {

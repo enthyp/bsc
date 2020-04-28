@@ -38,7 +38,6 @@ class WSClient(
         .build()
 
     private val socket: WSApi
-    private val sendChannel = Channel<Pair<MsgType, Any?>>()
     private val wsEventChannel: ReceiveChannel<WebSocket.Event>
 
     init {
@@ -56,7 +55,7 @@ class WSClient(
         wsEventChannel = socket.receiveWebSocketEvent()
     }
 
-    suspend fun ensureOpened() {
+    suspend fun sendNickname(nickname: String) {
         // TODO: I really should make all this event-driven, this sucks!
 
         loop@ while (true) {
@@ -65,6 +64,8 @@ class WSClient(
                 else -> continue@loop
             }
         }
+
+        socket.sendSignal(nickname)
     }
 
     override suspend fun send(type: MsgType, data: Any?) = withContext(this.coroutineContext) {
@@ -77,18 +78,24 @@ class WSClient(
 
     override suspend fun receive(listener: WSListener) = withContext(this.coroutineContext) {
         val receiveChannel = socket.receiveSignal()
+        Log.d("CallManager WSClient", "Receiving...")
 
         while (true) {
             val json = receiveChannel.receive()
+            Log.d("CallManager WSClient", "Got $json")
 
             withContext(Dispatchers.Default) {
+                Log.d("CallManager WSClient", "Parsing msg")
                 val msg: WSMessage = gson.fromJson(json, WSMessage::class.java)
+                Log.d("CallManager WSClient", "Dispatching msg")
                 dispatchMsg(msg, listener)
             }
         }
     }
 
     private suspend fun dispatchMsg(msg: WSMessage, listener: WSListener) {
+        Log.d("CallManager WSClient", msg.type.toString())
+
         when (msg.type) {
             MsgType.OFFER -> {
                 val desc = gson.fromJson(msg.payload, SessionDescription::class.java)

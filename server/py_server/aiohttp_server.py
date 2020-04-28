@@ -5,42 +5,70 @@ import asyncio
 import sys
 import uuid
 from aiohttp import web
+from enum import Enum
 
 from notifications import async_notify, setup_notifications
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
 
+class ClientState(Enum):
+    INIT = 0
+    LOGGED_IN = 1
+
+
+class ClientHandler:
+    def __init__(self, nick, state, socket):
+        self.nick = nick
+        self.state = state
+        self.socket = socket
+
+    @property
+    def logged_in(self):
+        return self.state == ClientState.LOGGED_IN
+
+    def log_in(self, nick):
+        self.nick = nick
+        self.state = ClientState.LOGGED_IN
+
+
 async def websocket_handler(request):
     ws = web.WebSocketResponse()
     await ws.prepare(request)
 
-    this = str(uuid.uuid4())
     clients = request.app['clients']
-    clients[this] = ws
-    # await ws.send_json({'type': 'bob', 'payload': 'uncle'})
+    handler = ClientHandler(nick=None, state=ClientState.INIT, socket=ws)
+
+    async def handle_login(handler, nickname):
+        clients[nickname] = handler
+        handler.log_in(nickname)
 
     async def handle_call(caller, callee, tokens):
         if callee in tokens:
             token = tokens[callee]
             await async_notify(token, {'type': 'incoming', 'caller': caller})
         else:
-            logging.debug('FUCK!')
+            logging.debug('call failed')
             # TODO: inform about error
 
     async def handle_accept(caller, callee, clients):
         if caller in clients:
-            client = clients[callee]
-            client.send_str(json.dumps({'type': 'accept', 'from': callee, 'to': caller}))
+            client = clients[caller]
+            await client.socket.send_str(json.dumps({'type': 'accepted', 'from': caller, 'to': callee}))
         else:
-            logging.debug('ACCEPT FUCK!')
+            logging.debug('accept failed')
             # TODO: inform about error
 
     logging.debug('Connected...')
     try:
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
-                # TODO: dispatch
+                # TODO: dispatch method
+                if not handler.logged_in:
+                    nick = msg.data.strip('"')  # TODO: suckage?
+                    await handle_login(handler, nick)
+                    continue
+
                 msg = json.loads(msg.json())
                 msg_type = msg['type']
                 payload = json.loads(msg['payload'])
@@ -51,10 +79,10 @@ async def websocket_handler(request):
                     await handle_accept(payload['from'], payload['to'], request.app['clients'])
                 else:
                     if msg_type in {'OFFER', 'ANSWER', 'ICE_CANDIDATE'}:
-                        for c_id, c_ws in request.app['clients'].items():
-                            if c_id != this:
-                                logging.debug('SENT: {} -> {}'.format(this, c_id))
-                                await c_ws.send_str(msg.data)
+                        for c in request.app['clients'].items():
+                            if c != handler:
+                                logging.debug('SENT: {} -> {}'.format(handler.nick, c.nick))
+                                await c.socket.send_str(msg.data)
                     else:
                         logging.error(f'Unknown msg: {msg.type}')
 
@@ -71,8 +99,7 @@ async def websocket_handler(request):
     finally:
         logging.debug('websocket connection closed')
 
-    del clients[this]
-
+    del clients[handler.nick]
     return ws
 
 
@@ -80,6 +107,7 @@ async def token_handler(request):
     body = await request.json()
     identity, token = body['id'], body['token']
     request.app['tokens'][identity] = token
+    logging.info(f'got token from {identity}')
 
     return web.Response()
 
