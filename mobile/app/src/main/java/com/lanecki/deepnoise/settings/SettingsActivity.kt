@@ -15,4 +15,9 @@ class SettingsActivity : AppCompatActivity() {
             .replace(R.id.fragment_container, SettingsFragment())
             .commit()
     }
+
+    companion object {
+        const val NICK_KEY = "NICK"
+        const val SERVER_ADDRESS_KEY = "SERVER_ADDRESS"
+    }
 }

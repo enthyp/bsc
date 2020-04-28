@@ -2,12 +2,12 @@ package com.lanecki.deepnoise.call
 
 import android.content.Context
 import android.util.Log
-import com.lanecki.deepnoise.call.websocket.WSClient
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
 import org.webrtc.voiceengine.WebRtcAudioUtils
 
 class PeerConnectionManager(
+    private val listener: PeerConnectionListener,
     private val context: Context,
     private val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback
 ) : SignallingListener {
@@ -52,7 +52,7 @@ class PeerConnectionManager(
         val observer = object : PeerConnectionObserver() {
             override fun onIceCandidate(p0: IceCandidate?) {
                 super.onIceCandidate(p0)
-                p0?.let { wsClient.send(WSClient.ICE_CANDIDATE, p0) }
+                p0?.let { listener.sendIceCandidate(p0) }
                 onIceCandidateReceived(p0!!)
                 Log.d(TAG, "ICE candidate from PeerConnection")
             }
@@ -90,7 +90,7 @@ class PeerConnectionManager(
                 peerConnection?.setLocalDescription(object : AppSdpObserver() {
                     override fun onSetSuccess() {
                         super.onSetSuccess()
-                        p0?.let { wsClient.send(WSClient.OFFER, p0) }
+                        p0?.let { listener.sendOffer(p0) }
                         Log.d(TAG, "Offer created in call.")
                     }
                 }, p0)
@@ -109,14 +109,13 @@ class PeerConnectionManager(
                 peerConnection?.setLocalDescription(object : AppSdpObserver() {
                     override fun onSetSuccess() {
                         super.onSetSuccess()
-                        p0?.let { wsClient.send(WSClient.ANSWER, p0) }
+                        p0?.let { listener.sendAnswer(p0) }
                         Log.d(TAG, "Answer created in answer.")
                     }
                 }, p0)
             }
         }, constraints)
     }
-
 
     override fun onIceCandidateReceived(iceCandidate: IceCandidate) {
         peerConnection?.addIceCandidate(iceCandidate)

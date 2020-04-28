@@ -1,8 +1,6 @@
 package com.lanecki.deepnoise.call.websocket
 
 import com.google.gson.Gson
-import com.lanecki.deepnoise.CallActivity
-import com.lanecki.deepnoise.call.SignallingListener
 import com.tinder.scarlet.Lifecycle
 import com.tinder.scarlet.Scarlet
 import com.tinder.scarlet.messageadapter.gson.GsonMessageAdapter
@@ -11,20 +9,22 @@ import com.tinder.scarlet.websocket.okhttp.newWebSocketFactory
 import com.tinder.streamadapter.coroutines.CoroutinesStreamAdapterFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.ReceiveChannel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.webrtc.IceCandidate
 import org.webrtc.SessionDescription
 import java.util.concurrent.TimeUnit
 
+interface WSClientI {
+    suspend fun send(type: MsgType, data: Any?)
+    suspend fun receive(listener: WSListener)
+}
+
 // TODO: handle exceptions (failed to connect, ...)
 class WSClient(
     private val serverAddress: String,
-    private val listener: WSEventListener,
     private val lifecycle: Lifecycle
-) :
+) : WSClientI,
     CoroutineScope by CoroutineScope(Dispatchers.IO) {
 
     private val backoffStrategy = ExponentialWithJitterBackoffStrategy(5000, 5000)
@@ -36,7 +36,6 @@ class WSClient(
         .build()
 
     private val socket: WSApi
-    private val receiveChannel: ReceiveChannel<Any>
 
     init {
         val address = if (serverAddress != "") serverAddress else SERVER_ADDRESS
@@ -49,70 +48,71 @@ class WSClient(
             .lifecycle(lifecycle)
             .build()
             .create()
-
-        receiveChannel = socket.receiveSignal()
     }
 
-    fun send(type: String, data: Any) = launch {
-        val jsonData = gson.toJson(data)
+    override suspend fun send(type: MsgType, data: Any?) {
+        val jsonData = withContext(Dispatchers.Main) { gson.toJson(data) }
         val msg = WSMessage(type, jsonData)
-        val json = gson.toJson(msg)
+        val json =  withContext(Dispatchers.Main) { gson.toJson(msg) }
         socket.sendSignal(json)
     }
 
-    fun receive() = launch {
+    override suspend fun receive(listener: WSListener) {
+        val receiveChannel = socket.receiveSignal()
+
         while (true) {
             val json = receiveChannel.receive() as String
-            val msg = gson.fromJson(json, WSMessage::class.java)
-            val jsonPayload = msg.payload
 
-            when (msg.type) {
-                ICE_CANDIDATE -> {
-                    val candidate = gson.fromJson(jsonPayload, IceCandidate::class.java)
-                    withContext(Dispatchers.Main) {
-                        listener.onIceCandidateReceived(candidate)
-                    }
-                }
-                OFFER -> {
-                    val desc = gson.fromJson(jsonPayload, SessionDescription::class.java)
-                    withContext(Dispatchers.Main) {
-                        listener.onOfferReceived(desc)
-                    }
-                }
-                ANSWER -> {
-                    val answer = gson.fromJson(jsonPayload, SessionDescription::class.java)
-                    withContext(Dispatchers.Main) {
-                        listener.onAnswerReceived(answer)
-                    }
-                }
+            withContext(Dispatchers.Default) {
+                val msg: WSMessage = gson.fromJson(json, WSMessage::class.java)
+                dispatchMsg(msg, listener)
             }
         }
     }
 
-    enum class Type {
-        CALL,
-        ACCEPTED,
-        REFUSED,
-        OFFER,
-        ANSWER,
-        ICE_CANDIDATE
+    private suspend fun dispatchMsg(msg: WSMessage, listener: WSListener) {
+        when (msg.type) {
+            MsgType.OFFER -> {
+                val desc = gson.fromJson(msg.payload, SessionDescription::class.java)
+                listener.onOffer(desc)
+            }
+            MsgType.ANSWER -> {
+                val desc = gson.fromJson(msg.payload, SessionDescription::class.java)
+                listener.onAnswer(desc)
+            }
+            MsgType.ICE_CANDIDATE -> {
+                val ice = gson.fromJson(msg.payload, IceCandidate::class.java)
+                listener.onIceCandidate(ice)
+            }
+            MsgType.ACCEPTED -> {
+                val acc = gson.fromJson(msg.payload, AcceptedMsg::class.java)
+                listener.onAccepted(acc)
+            }
+            MsgType.REFUSED -> {
+                val ref = gson.fromJson(msg.payload, RefusedMsg::class.java)
+                listener.onRefused(ref)
+            }
+            else -> listener.onError(msg.type)
+        }
     }
 
     companion object {
-        private const val SERVER_ADDRESS = "ws://192.168.100.106:5000"  // TODO: in Settings panel
-
-        private const val SIGNAL_TYPE = "signal_type"
-        private const val PAYLOAD = "payload"
-        const val OFFER = "offer"
-        const val ANSWER = "answer"
-        const val ICE_CANDIDATE = "ice_candidate"
+        private const val SERVER_ADDRESS = "ws://192.168.100.106:5000"  // TODO: in Settings panel only
     }
 }
 
-interface WSEventListener {
-    fun onAccepted()
-    fun onRefused()
-    fun onIceCandidateReceived(candidate: IceCandidate)
-    fun onOfferReceived(sessionDescription: SessionDescription)
-    fun onAnswerReceived(sessionDescription: SessionDescription)
+enum class MsgType {
+    CALL,
+    ACCEPT,
+    ACCEPTED,
+    REFUSED,
+    OFFER,
+    ANSWER,
+    ICE_CANDIDATE
 }
+
+data class WSMessage(val type: MsgType, val payload: String)
+data class CallMsg(val from: String, val to: String)
+data class AcceptMsg(val from: String, val to: String)
+data class AcceptedMsg(val from: String, val to: String)
+data class RefusedMsg(val from: String, val to: String)

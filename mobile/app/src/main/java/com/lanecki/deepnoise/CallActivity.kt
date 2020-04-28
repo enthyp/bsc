@@ -4,18 +4,21 @@ import android.Manifest
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import com.lanecki.deepnoise.call.CallManager
+import com.lanecki.deepnoise.call.CallState
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
+import com.lanecki.deepnoise.settings.SettingsActivity
+import kotlinx.coroutines.launch
 
 // TODO: use some Android config instead of hardcoding!
-class CallActivity : AppCompatActivity() {
+class CallActivity : AppCompatActivity(), CallUI {
 
     private lateinit var callManager: CallManager
 
@@ -24,13 +27,26 @@ class CallActivity : AppCompatActivity() {
         val binding = ActivityCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Initialize CallManager.
         val sharedPreferences: SharedPreferences =
             PreferenceManager.getDefaultSharedPreferences(this)
+        val nick = sharedPreferences.getString(SettingsActivity.NICK_KEY, "") ?: ""
+        val serverAddress = sharedPreferences.getString(SettingsActivity.SERVER_ADDRESS_KEY, "") ?: ""
 
-        // TODO: can't be hardcoded!
-        val nick = sharedPreferences.getString("nick", "") ?: ""
-        val serverAddress = sharedPreferences.getString("server_address", "") ?: ""
+        val initState = intent.getSerializableExtra(INITIAL_STATE_KEY) as CallState
+        val callee = intent.getSerializableExtra(CALLEE_KEY) as String
+
+        callManager = CallManager(initState, nick, callee, serverAddress, this, application)
+
         checkAudioPermission()
+    }
+
+    override fun onModelLoadFailure() {
+        Toast.makeText(this, "Failed to load speech model!", Toast.LENGTH_LONG).show()
+    }
+
+    override fun onCallRefused() {
+        Toast.makeText(this, "Call refused!", Toast.LENGTH_LONG).show()
     }
 
     private fun checkAudioPermission() {
@@ -50,11 +66,7 @@ class CallActivity : AppCompatActivity() {
     }
 
     private fun onAudioPermissionGranted() {
-        callManager = CallManager(
-            nick,
-            serverAddress,
-            application
-        )
+        callManager.run()
     }
 
     private fun showPermissionRationaleDialog() {
@@ -90,11 +102,6 @@ class CallActivity : AppCompatActivity() {
         callManager.shutdown()
     }
 
-    enum class State {
-        INCOMING,
-        OUTGOING
-    }
-
     companion object {
         const val CALLEE_KEY = "CALLEE"
         const val INITIAL_STATE_KEY = "INITIAL_STATE"
@@ -102,4 +109,9 @@ class CallActivity : AppCompatActivity() {
         private const val AUDIO_PERMISSION_REQUEST_CODE = 1
         private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
     }
+}
+
+interface CallUI {
+    fun onModelLoadFailure()
+    fun onCallRefused()
 }
