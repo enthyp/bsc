@@ -168,7 +168,7 @@ class ClientEndpoint:
 
         if not self.conversation:
             # TODO: handle errors
-            logging.error(f'Accept: call {call_id} not found')
+            logging.error(f'Refuse: call {call_id} not found')
             return
 
         caller_endpoint = self.server.get_endpoint(caller)
