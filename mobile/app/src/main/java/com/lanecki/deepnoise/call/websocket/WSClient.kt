@@ -65,7 +65,7 @@ class WSClient(
             }
         }
 
-        socket.sendSignal(nickname)
+        send(MsgType.LOGIN, LoginMsg(nickname))
     }
 
     override suspend fun send(type: MsgType, data: Any?) = withContext(this.coroutineContext) {
@@ -133,6 +133,7 @@ class WSClient(
 }
 
 enum class MsgType {
+    LOGIN,
     CALL,
     ACCEPT,
     ACCEPTED,
@@ -143,7 +144,10 @@ enum class MsgType {
 }
 
 data class WSMessage(val type: MsgType, val payload: String)
+data class LoginMsg(val nick: String)
+// TODO: one type is enough, dispatch by String anyway!
 data class CallMsg(val from: String, val to: String)
-data class AcceptMsg(val from: String, val to: String)
-data class AcceptedMsg(val from: String, val to: String)
-data class RefusedMsg(val from: String, val to: String)
+data class AcceptMsg(val from: String, val to: String, val call_id: String)
+data class RefuseMsg(val from: String, val to: String, val call_id: String)
+data class AcceptedMsg(val from: String, val to: String, val call_id: String)
+data class RefusedMsg(val from: String, val to: String, val call_id: String)

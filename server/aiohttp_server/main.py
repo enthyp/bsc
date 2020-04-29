@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import aiohttp
@@ -19,6 +20,7 @@ async def websocket_handler(request):
     logging.info('Connected...')
 
     server = request.app['server']
+    # TODO: nick and token should be in place (login)
     endpoint = ClientEndpoint(socket=ws, server=server)
 
     try:
@@ -41,7 +43,7 @@ async def websocket_handler(request):
                 break
 
     except Exception as e:
-        logging.error(e)
+        logging.error((e, type(e)))
     finally:
         logging.info('Websocket connection closed')
 

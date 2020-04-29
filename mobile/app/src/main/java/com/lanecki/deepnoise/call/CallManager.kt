@@ -29,6 +29,7 @@ class CallManager(
     private var state: CallState,
     private val nickname: String,
     private val callee: String,
+    private var callId: String?,
     private val serverAddress: String,
     private val ui: CallUI,
     private val context: Context
@@ -67,7 +68,7 @@ class CallManager(
             val callback = audioCallback()
             peerConnectionManager = PeerConnectionManager(this@CallManager, context, callback)
             state = CallState.SIGNALLING
-            launch { wsClient.send(MsgType.ACCEPT, AcceptMsg(callee, nickname)) }
+            launch { wsClient.send(MsgType.ACCEPT, AcceptMsg(nickname, callee, callId!!)) }
             Log.d(TAG, "send ACCEPT in $state")
         }
     }

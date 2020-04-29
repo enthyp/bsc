@@ -7,6 +7,7 @@ from notifications import async_notify
 class Server:
     def __init__(self):
         self.clients = {}
+        self.tokens = {}  # TODO: DB
         self.calls = {}
 
     def add_client(self, client):
@@ -23,22 +24,31 @@ class Server:
             # TODO: handle error (possible?)
             logging.error(f'No user to delete: {client.nick}')
 
+    # TODO: property getters?
     def get_endpoint(self, nick):
         # TODO: handle error
         return self.clients.get(nick, None)
 
-    def on_token(self, identity, token):
-        if identity in self.clients:
-            self.clients[identity].add_token(token)
-        else:
-            # TODO: handle error
-            logging.error(f'Token received: user {identity} not found')
+    def get_token(self, nick):
+        # TODO: handle error
+        return self.tokens.get(nick, None)
 
-    def start_conversation(self):
-        conversation = Conversation()
-        call_id = str(uuid.uuid4())  # TODO: tb replaced by DB id (quality rating, duration etc.)
-        self.calls[call_id] = conversation
-        return conversation
+    def get_call(self, call_id):
+        # TODO: handle error
+        return self.calls.get(call_id, None)
+
+    def on_token(self, identity, token):
+        self.tokens[identity] = token  # TODO: DB
+        logging.info(f'Token received for user {identity}')
+
+    async def initiate_call(self, caller, callee):
+        token = self.tokens.get(callee, None)
+        if token:
+            conversation = Conversation()
+            call_id = str(uuid.uuid4())  # TODO: tb replaced by DB id (quality rating, duration etc.)
+            self.calls[call_id] = conversation
+            await async_notify(token, {'type': ClientEndpoint.INCOMING, 'caller': caller, 'call_id': call_id})
+            return conversation
 
 
 class Conversation:
@@ -51,20 +61,20 @@ class Conversation:
     def leave(self, client):
         del self.parties[client.nick]
 
-    def signal(self, sender, type, msg):
-        for nick, endpoint in self.parties:
+    async def signal(self, sender, type, msg):
+        for nick, endpoint in self.parties.items():
             if nick != sender.nick:
-                endpoint.send_msg(type, msg)
+                await endpoint.send_msg(type, msg)
 
 
 # TODO: states seem to deserve their own objects to clean it all up
 class ClientEndpoint:
 
     # Client connection state
-    INIT = 0
-    LOGGED_IN = 1
-    RENDEZVOUS = 2
-    SIGNALLING = 3
+    INIT = 'INIT'
+    LOGGED_IN = 'LOGGED IN'
+    RENDEZVOUS = 'RENDEZVOUS'
+    SIGNALLING = 'SIGNALLING'
 
     # Messages from the client
     LOGIN = 'LOGIN'
@@ -86,7 +96,7 @@ class ClientEndpoint:
         self.socket = socket
         self.server = server
         self.state = ClientEndpoint.INIT
-        self.nick = None
+        self.nick = None  # TODO: should come from login process
         self.token = None
         self.conversation = None
 
@@ -94,18 +104,15 @@ class ClientEndpoint:
         self.handlers = {
             (ClientEndpoint.INIT, ClientEndpoint.LOGIN): self.login,
             (ClientEndpoint.LOGGED_IN, ClientEndpoint.CALL): self.call,
-            (ClientEndpoint.RENDEZVOUS, ClientEndpoint.ACCEPT): self.accept,
-            (ClientEndpoint.RENDEZVOUS, ClientEndpoint.REFUSE): self.refuse,
+            (ClientEndpoint.LOGGED_IN, ClientEndpoint.ACCEPT): self.accept,
+            (ClientEndpoint.LOGGED_IN, ClientEndpoint.REFUSE): self.refuse,
             (ClientEndpoint.SIGNALLING, ClientEndpoint.OFFER): self.offer,
             (ClientEndpoint.SIGNALLING, ClientEndpoint.ANSWER): self.answer,
             (ClientEndpoint.SIGNALLING, ClientEndpoint.ICE): self.ice,
         }
 
-    def add_token(self, token):
-        self.token = token
-
     async def dispatch(self, type, msg):
-        handler = self.handlers[(self.state, type)]
+        handler = self.handlers.get((self.state, type), None)
         if handler:
             await handler(msg)  # TODO: handle errors
         else:
@@ -113,6 +120,12 @@ class ClientEndpoint:
 
     async def login(self, msg):
         nick = msg['nick']
+        token = self.server.get_token(nick)
+        if not token:
+            logging.error(f'No token on login for user: {nick}')
+            return
+
+        self.token = token
         self.nick = nick
         self.state = ClientEndpoint.LOGGED_IN
         self.server.add_client(self)
@@ -120,66 +133,80 @@ class ClientEndpoint:
 
     async def call(self, msg):
         callee = msg['to']
-        callee_endpoint = self.server.get_endpoint(callee)
-        if callee_endpoint:
-            self.conversation = self.server.start_conversation(self)
+
+        self.conversation = await self.server.initiate_call(self.nick, callee)
+        if self.conversation:
             self.state = ClientEndpoint.RENDEZVOUS
-            await callee_endpoint.on_incoming_call(self.nick, self.conversation)
+            logging.info(f'Incoming call pushed from {self.nick} to {callee}')
         else:
-            # TODO: handle errors
-            logging.error(f'Call: user {callee} not found')
+            logging.error(f'Incoming call from {self.nick} to {callee}: no token for {callee}')
 
     async def accept(self, msg):
         caller = msg['to']
+        call_id = msg['call_id']
+        self.conversation = self.server.get_call(call_id)
+
+        if not self.conversation:
+            # TODO: handle errors
+            logging.error(f'Accept: call {call_id} not found')
+            return
+
         caller_endpoint = self.server.get_endpoint(caller)
-        if caller_endpoint:
-            self.conversation.join(self)
-            self.state = ClientEndpoint.SIGNALLING
-            caller_endpoint.on_accepted_call(self.nick)
-        else:
+        if not caller_endpoint:
             # TODO: handle errors
             logging.error(f'Accept: user {caller} not found')
+            return
+
+        self.conversation.join(self)
+        self.state = ClientEndpoint.SIGNALLING
+        await caller_endpoint.on_accepted_call(self.nick)
 
     async def refuse(self, msg):
         caller = msg['to']
+        call_id = msg['call_id']
+        self.conversation = self.server.get_call(call_id)
+
+        if not self.conversation:
+            # TODO: handle errors
+            logging.error(f'Accept: call {call_id} not found')
+            return
+
         caller_endpoint = self.server.get_endpoint(caller)
-        if caller_endpoint:
+        if not caller_endpoint:
+            # TODO: handle errors
+            logging.error(f'Refuse: user {caller} not found')
+        else:
             self.conversation = None
             self.state = ClientEndpoint.LOGGED_IN
             caller_endpoint.on_refused_call(self.nick)
-        else:
-            # TODO: handle errors
-            logging.error(f'Refuse: user {caller} not found')
 
     async def offer(self, msg):
-        self.conversation.signal(self, ClientEndpoint.OFFER, msg)
-        logging.debug(f'Offer published by {self.nick}: {msg}')
+        await self.conversation.signal(self, ClientEndpoint.OFFER, msg)
+        logging.info(f'Offer published by {self.nick}: {msg}')
 
     async def answer(self, msg):
-        self.conversation.signal(self, msg)
-        logging.debug(f'Answer published by {self.nick}: {msg}')
+        await self.conversation.signal(self, ClientEndpoint.ANSWER, msg)
+        logging.info(f'Answer published by {self.nick}: {msg}')
 
     async def ice(self, msg):
-        self.conversation.signal(self, msg)
-        logging.debug(f'ICE candidate published by {self.nick}: {msg}')
-
-    async def on_incoming_call(self, caller, conversation):
-        if self.token:
-            await async_notify(self.token, {'type': ClientEndpoint.INCOMING, 'caller': caller})
-            self.conversation = conversation
-            self.state = ClientEndpoint.RENDEZVOUS
-            logging.info(f'Incoming call pushed to: {self.nick}')
-        else:
-            # TODO: handle error
-            logging.error(f'Incoming call from {caller} to {self.nick}: no token for {self.nick}')
+        await self.conversation.signal(self, ClientEndpoint.ICE, msg)
+        logging.info(f'ICE candidate published by {self.nick}: {msg}')
 
     async def on_accepted_call(self, callee):
+        if self.state != ClientEndpoint.RENDEZVOUS:
+            logging.error(f'on_accepted_call from {callee} to {self.nick} in state {self.state}')
+            return
+
         self.conversation.join(self)
         self.state = ClientEndpoint.SIGNALLING
         await self.send_msg(ClientEndpoint.ACCEPTED, {'from': self.nick, 'to': callee})
         logging.info(f'Accepted call pushed to: {self.nick}')
 
     async def on_refused_call(self, callee):
+        if self.state != ClientEndpoint.RENDEZVOUS:
+            logging.error(f'on_refused_call from {callee} to {self.nick} in state {self.state}')
+            return
+
         self.conversation = None
         self.state = ClientEndpoint.LOGGED_IN
         await self.send_msg(ClientEndpoint.REFUSED, {'from': self.nick, 'to': callee})

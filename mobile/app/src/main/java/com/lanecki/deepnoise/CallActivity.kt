@@ -38,8 +38,9 @@ class CallActivity : AppCompatActivity(), CallUI {
 
         val initState = intent.getSerializableExtra(INITIAL_STATE_KEY) as CallState
         val callee = intent.getSerializableExtra(CALLEE_KEY) as String
+        val callId: String? = intent.getSerializableExtra(CALL_ID_KEY) as String?
 
-        callManager = CallManager(initState, nick, callee, serverAddress, this, application)
+        callManager = CallManager(initState, nick, callee, callId, serverAddress, this, application)
 
         checkAudioPermission()
     }
@@ -108,6 +109,7 @@ class CallActivity : AppCompatActivity(), CallUI {
     companion object {
         const val CALLEE_KEY = "CALLEE"
         const val INITIAL_STATE_KEY = "INITIAL_STATE"
+        const val CALL_ID_KEY = "CALL_ID"
 
         private const val AUDIO_PERMISSION_REQUEST_CODE = 1
         private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO

@@ -15,7 +15,7 @@ class FMService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         if (remoteMessage.data.isNotEmpty()) {
             when (remoteMessage.data["type"]) {
-                "incoming" -> notifyIncomingCall(remoteMessage.data)
+                "INCOMING" -> notifyIncomingCall(remoteMessage.data)
                 else -> Log.d(TAG, "Unknown message type: $this")
             }
         }
@@ -33,10 +33,12 @@ class FMService : FirebaseMessagingService() {
 
     private fun notifyIncomingCall(data: MutableMap<String, String>) {
         val caller = data["caller"]
+        val callId = data["call_id"]
 
         // TODO: give the user some choice. Also, it's no good on the tablet...
         val intent = Intent(this, CallActivity::class.java).apply {
             putExtra(CallActivity.CALLEE_KEY, caller)
+            putExtra(CallActivity.CALL_ID_KEY, callId)
             putExtra(CallActivity.INITIAL_STATE_KEY, CallState.INCOMING)
         }
         val pendingIntent = PendingIntent.getActivity(
