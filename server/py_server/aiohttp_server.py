@@ -1,9 +1,7 @@
 import json
 import logging
 import aiohttp
-import asyncio
 import sys
-import uuid
 from aiohttp import web
 from enum import Enum
 
@@ -32,6 +30,12 @@ class ClientHandler:
         self.state = ClientState.LOGGED_IN
 
 
+async def send_msg(type, payload, socket):
+    p_json = json.dumps(payload)
+    ws_msg = json.dumps({'type': type, 'payload': p_json})
+    await socket.send_json(ws_msg)
+
+
 async def websocket_handler(request):
     ws = web.WebSocketResponse()
     await ws.prepare(request)
@@ -40,6 +44,7 @@ async def websocket_handler(request):
     handler = ClientHandler(nick=None, state=ClientState.INIT, socket=ws)
 
     async def handle_login(handler, nickname):
+        logging.debug(f'login {nickname}')
         clients[nickname] = handler
         handler.log_in(nickname)
 
@@ -47,6 +52,7 @@ async def websocket_handler(request):
         if callee in tokens:
             token = tokens[callee]
             await async_notify(token, {'type': 'incoming', 'caller': caller})
+            logging.debug('sent incoming')
         else:
             logging.debug('call failed')
             # TODO: inform about error
@@ -54,7 +60,8 @@ async def websocket_handler(request):
     async def handle_accept(caller, callee, clients):
         if caller in clients:
             client = clients[caller]
-            await client.socket.send_str(json.dumps({'type': 'accepted', 'from': caller, 'to': callee}))
+            await send_msg('ACCEPTED', {'from': caller, 'to': callee}, client.socket)
+            logging.debug('sent accepted')
         else:
             logging.debug('accept failed')
             # TODO: inform about error
@@ -63,15 +70,17 @@ async def websocket_handler(request):
     try:
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
+                msg_data = msg.json()
+
                 # TODO: dispatch method
+                logging.debug(msg_data)
                 if not handler.logged_in:
-                    nick = msg.data.strip('"')  # TODO: suckage?
-                    await handle_login(handler, nick)
+                    await handle_login(handler, msg_data)
                     continue
 
-                msg = json.loads(msg.json())
-                msg_type = msg['type']
-                payload = json.loads(msg['payload'])
+                msg_obj = json.loads(msg_data)
+                msg_type = msg_obj['type']
+                payload = json.loads(msg_obj['payload'])
 
                 if msg_type == 'CALL':
                     await handle_call(payload['from'], payload['to'], request.app['tokens'])
@@ -79,10 +88,10 @@ async def websocket_handler(request):
                     await handle_accept(payload['from'], payload['to'], request.app['clients'])
                 else:
                     if msg_type in {'OFFER', 'ANSWER', 'ICE_CANDIDATE'}:
-                        for c in request.app['clients'].items():
-                            if c != handler:
-                                logging.debug('SENT: {} -> {}'.format(handler.nick, c.nick))
-                                await c.socket.send_str(msg.data)
+                        for nick, other_handler in request.app['clients'].items():
+                            if nick != handler.nick:
+                                logging.debug(f'SENT: {handler.nick} -> {nick} : {msg_data}')
+                                await other_handler.socket.send_json(msg_data)
                     else:
                         logging.error(f'Unknown msg: {msg.type}')
 

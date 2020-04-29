@@ -56,21 +56,25 @@ class CallManager(
 
     // Implement WSListener interface.
     suspend fun run() = withContext(this.coroutineContext) {
-        wsClient.sendNickname(nickname)
         launch { wsClient.receive(this@CallManager) }
+        wsClient.sendNickname(nickname)
 
         if (state == CallState.OUTGOING) {
             state = CallState.AWAITING_RESPONSE
             launch { wsClient.send(MsgType.CALL, CallMsg(nickname, callee)) }
+            Log.d(TAG, "send CALL in $state")
         } else {
             val callback = audioCallback()
             peerConnectionManager = PeerConnectionManager(this@CallManager, context, callback)
             state = CallState.SIGNALLING
             launch { wsClient.send(MsgType.ACCEPT, AcceptMsg(callee, nickname)) }
+            Log.d(TAG, "send ACCEPT in $state")
         }
     }
 
     override fun onAccepted(msg: AcceptedMsg) {
+        Log.d(TAG, "onAccepted in $state")
+
         if (state == CallState.AWAITING_RESPONSE) {
             val callback = audioCallback()
             peerConnectionManager = PeerConnectionManager(this@CallManager, context, callback)
@@ -84,6 +88,8 @@ class CallManager(
     }
 
     override fun onRefused(msg: RefusedMsg) {
+        Log.d(TAG, "onRefused in $state")
+
         if (state == CallState.AWAITING_RESPONSE) {
             // TODO: gracefully
             ui.onCallRefused()
@@ -100,6 +106,8 @@ class CallManager(
     }
 
     override suspend fun onOffer(sessionDescription: SessionDescription) {
+        Log.d(TAG, "onOffer in $state")
+
         if (state == CallState.SIGNALLING) {
             peerConnectionManager.onOfferReceived(sessionDescription)
         } else {
@@ -108,6 +116,8 @@ class CallManager(
     }
 
     override suspend fun onAnswer(sessionDescription: SessionDescription) {
+        Log.d(TAG, "onAnswer in $state")
+
         if (state == CallState.SIGNALLING) {
             peerConnectionManager.onAnswerReceived(sessionDescription)
         } else {
@@ -116,6 +126,8 @@ class CallManager(
     }
 
     override suspend fun onIceCandidate(iceCandidate: IceCandidate) {
+        Log.d(TAG, "onIce in $state")
+
         if (state == CallState.SIGNALLING) {
             peerConnectionManager.onIceCandidateReceived(iceCandidate)
         } else {
@@ -125,14 +137,20 @@ class CallManager(
 
     // Implement PeerConnectionListener interface.
     override fun sendOffer(sessionDescription: SessionDescription?) {
+        Log.d(TAG, "sendOffer in $state")
+
         launch { wsClient.send(MsgType.OFFER, sessionDescription) }
     }
 
     override fun sendAnswer(sessionDescription: SessionDescription?) {
+        Log.d(TAG, "sendAnswer in $state")
+
         launch { wsClient.send(MsgType.ANSWER, sessionDescription) }
     }
 
     override fun sendIceCandidate(iceCandidate: IceCandidate?) {
+        Log.d(TAG, "sendIce in $state")
+
         launch { wsClient.send(MsgType.ICE_CANDIDATE, iceCandidate) }
     }
 
@@ -153,7 +171,6 @@ class CallManager(
             for (i in 0 until BUFFER_SIZE)
                 p0.putShort(2 * i, outBuffer[0][i].toShort())
         }
-
     }
 
     private fun fsmError(called: String) {
@@ -161,6 +178,7 @@ class CallManager(
     }
 
     fun shutdown() {
+        Log.d(TAG, "shutdown in $state")
         lifecycle.stop()
     }
 

@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -15,10 +14,7 @@ import androidx.preference.PreferenceManager
 import com.lanecki.deepnoise.call.CallManager
 import com.lanecki.deepnoise.call.CallState
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
-import com.lanecki.deepnoise.settings.SettingsActivity
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 // TODO: use some Android config instead of hardcoding!
 class CallActivity : AppCompatActivity(), CallUI {

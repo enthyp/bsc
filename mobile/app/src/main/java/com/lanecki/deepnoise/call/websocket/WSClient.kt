@@ -73,7 +73,9 @@ class WSClient(
         val msg = WSMessage(type, jsonData)
         val json = gson.toJson(msg)
         socket.sendSignal(json)
+        Log.d("CallManager", "Sent: $json")
         // TODO: use GsonMessageAdapter for serialization somehow
+        return@withContext
     }
 
     override suspend fun receive(listener: WSListener) = withContext(this.coroutineContext) {
@@ -81,14 +83,18 @@ class WSClient(
         Log.d("CallManager WSClient", "Receiving...")
 
         while (true) {
-            val json = receiveChannel.receive()
-            Log.d("CallManager WSClient", "Got $json")
+            try {
+                val json = receiveChannel.receive()
+                Log.d("CallManager WSClient", "Got $json")
 
-            withContext(Dispatchers.Default) {
-                Log.d("CallManager WSClient", "Parsing msg")
-                val msg: WSMessage = gson.fromJson(json, WSMessage::class.java)
-                Log.d("CallManager WSClient", "Dispatching msg")
-                dispatchMsg(msg, listener)
+                withContext(Dispatchers.Default) {
+                    Log.d("CallManager WSClient", "Parsing msg")
+                    val msg: WSMessage = gson.fromJson(json, WSMessage::class.java)
+                    Log.d("CallManager WSClient", "Dispatching msg")
+                    dispatchMsg(msg, listener)
+                }
+            } catch (e: Exception) {
+                Log.d("CallManager WSClient", "Fucked up with $e")
             }
         }
     }
