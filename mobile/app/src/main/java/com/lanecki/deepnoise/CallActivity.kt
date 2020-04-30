@@ -3,7 +3,12 @@ package com.lanecki.deepnoise
 import android.Manifest
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.view.View
+import android.view.View.GONE
+import android.view.Window
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -11,13 +16,27 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.lanecki.deepnoise.call.CallManager
 import com.lanecki.deepnoise.call.CallState
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
 import kotlinx.coroutines.launch
 
+
 // TODO: use some Android config instead of hardcoding!
 class CallActivity : AppCompatActivity(), CallUI {
+
+    companion object {
+        const val CALLEE_KEY = "CALLEE"
+        const val INITIAL_STATE_KEY = "INITIAL_STATE"
+        const val CALL_ID_KEY = "CALL_ID"
+
+        private const val AUDIO_PERMISSION_REQUEST_CODE = 1
+        private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
+    }
+
+    private lateinit var callActionFab: FloatingActionButton
+    private lateinit var hangupActionFab: FloatingActionButton
 
     private lateinit var callManager: CallManager
 
@@ -25,6 +44,13 @@ class CallActivity : AppCompatActivity(), CallUI {
         super.onCreate(savedInstanceState)
         val binding = ActivityCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        setupWindow()
+
+        callActionFab = binding.call
+        hangupActionFab = binding.hangup
+        callActionFab.setOnClickListener(callActionFabClickListener());
+        hangupActionFab.setOnClickListener(hangupActionFabClickListener());
 
         // Initialize CallManager.
         val sharedPreferences: SharedPreferences =
@@ -43,6 +69,36 @@ class CallActivity : AppCompatActivity(), CallUI {
         callManager = CallManager(initState, nick, callee, callId, serverAddress, this, application)
 
         checkAudioPermission()
+    }
+
+    private fun callActionFabClickListener() = View.OnClickListener {
+        // TODO: change the state
+        callActionFab.visibility = GONE
+    }
+
+    private fun hangupActionFabClickListener() = View.OnClickListener {
+        // TODO: send refusal
+        finish()
+    }
+
+    private fun setupWindow() {
+        // These flags ensure that the activity can be launched when the screen is locked.
+        val window: Window = window
+        if (Build.VERSION.SDK_INT >= 27) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+                        or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                        or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        callManager.shutdown()
     }
 
     override fun onModelLoadFailure() {
@@ -99,20 +155,6 @@ class CallActivity : AppCompatActivity(), CallUI {
 
     private fun onAudioPermissionDenied() {
         Toast.makeText(this, "Audio Permission Denied", Toast.LENGTH_LONG).show()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        callManager.shutdown()
-    }
-
-    companion object {
-        const val CALLEE_KEY = "CALLEE"
-        const val INITIAL_STATE_KEY = "INITIAL_STATE"
-        const val CALL_ID_KEY = "CALL_ID"
-
-        private const val AUDIO_PERMISSION_REQUEST_CODE = 1
-        private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
     }
 }
 
