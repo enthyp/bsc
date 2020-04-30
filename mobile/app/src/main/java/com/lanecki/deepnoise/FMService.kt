@@ -37,9 +37,9 @@ class FMService : FirebaseMessagingService() {
 
         // TODO: give the user some choice. Also, it's no good on the tablet...
         val intent = Intent(this, CallActivity::class.java).apply {
-            putExtra(CallActivity.CALLEE_KEY, caller)
-            putExtra(CallActivity.CALL_ID_KEY, callId)
-            putExtra(CallActivity.INITIAL_STATE_KEY, CallState.INCOMING)
+            putExtra(Constant.CALLEE_KEY, caller)
+            putExtra(Constant.CALL_ID_KEY, callId)
+            putExtra(Constant.INITIAL_STATE_KEY, CallState.INCOMING)
         }
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,

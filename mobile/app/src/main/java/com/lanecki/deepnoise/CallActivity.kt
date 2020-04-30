@@ -1,12 +1,14 @@
 package com.lanecki.deepnoise
 
 import android.Manifest
+import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.view.View.GONE
 import android.view.Window
 import android.view.WindowManager
 import android.widget.Toast
@@ -27,10 +29,6 @@ import kotlinx.coroutines.launch
 class CallActivity : AppCompatActivity(), CallUI {
 
     companion object {
-        const val CALLEE_KEY = "CALLEE"
-        const val INITIAL_STATE_KEY = "INITIAL_STATE"
-        const val CALL_ID_KEY = "CALL_ID"
-
         private const val AUDIO_PERMISSION_REQUEST_CODE = 1
         private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
     }
@@ -45,12 +43,13 @@ class CallActivity : AppCompatActivity(), CallUI {
         val binding = ActivityCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupWindow()
-
         callActionFab = binding.call
         hangupActionFab = binding.hangup
         callActionFab.setOnClickListener(callActionFabClickListener());
         hangupActionFab.setOnClickListener(hangupActionFabClickListener());
+
+        setupWindow()
+        setupAudio()
 
         // Initialize CallManager.
         val sharedPreferences: SharedPreferences =
@@ -62,9 +61,9 @@ class CallActivity : AppCompatActivity(), CallUI {
         val nick = sharedPreferences.getString(nickKey, "") ?: ""
         val serverAddress = sharedPreferences.getString(serverAddressKey, "") ?: ""
 
-        val initState = intent.getSerializableExtra(INITIAL_STATE_KEY) as CallState
-        val callee = intent.getSerializableExtra(CALLEE_KEY) as String
-        val callId: String? = intent.getSerializableExtra(CALL_ID_KEY) as String?
+        val initState = intent.getSerializableExtra(Constant.INITIAL_STATE_KEY) as CallState
+        val callee = intent.getSerializableExtra(Constant.CALLEE_KEY) as String
+        val callId: String? = intent.getSerializableExtra(Constant.CALL_ID_KEY) as String?
 
         callManager = CallManager(initState, nick, callee, callId, serverAddress, this, application)
 
@@ -73,7 +72,7 @@ class CallActivity : AppCompatActivity(), CallUI {
 
     private fun callActionFabClickListener() = View.OnClickListener {
         // TODO: change the state
-        callActionFab.visibility = GONE
+        callActionFab.visibility = View.GONE
     }
 
     private fun hangupActionFabClickListener() = View.OnClickListener {
@@ -96,6 +95,21 @@ class CallActivity : AppCompatActivity(), CallUI {
         }
     }
 
+    private fun setupAudio() {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val isWiredHeadsetOn = if (Build.VERSION.SDK_INT >= 23) {
+            audioManager.getDevices(AudioManager.GET_DEVICES_ALL)
+                .map { d -> d.type }
+                .contains(TYPE_WIRED_HEADSET)
+        } else {
+            audioManager.isWiredHeadsetOn
+        }
+
+        audioManager.mode =
+            if (isWiredHeadsetOn) AudioManager.MODE_IN_CALL else AudioManager.MODE_IN_COMMUNICATION
+        audioManager.isSpeakerphoneOn = !isWiredHeadsetOn
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         callManager.shutdown()
@@ -107,6 +121,7 @@ class CallActivity : AppCompatActivity(), CallUI {
 
     override fun onCallRefused() {
         Toast.makeText(this, "Call refused!", Toast.LENGTH_LONG).show()
+        finish()
     }
 
     private fun checkAudioPermission() {

@@ -179,8 +179,9 @@ class CallManager(
     }
 
     fun shutdown() {
-        Log.d(TAG, "shutdown in $state")
+        peerConnectionManager.shutdown()
         lifecycle.stop()
+        Log.d(TAG, "shutdown in $state")
     }
 
     companion object {

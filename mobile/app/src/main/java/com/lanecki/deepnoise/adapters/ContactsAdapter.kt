@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.lanecki.deepnoise.CallActivity
+import com.lanecki.deepnoise.Constant
 import com.lanecki.deepnoise.R
 import com.lanecki.deepnoise.call.CallManager
 import com.lanecki.deepnoise.call.CallState
@@ -21,8 +22,8 @@ class ContactsAdapter(private val contacts: List<String>) : RecyclerView.Adapter
                 val callee = binding.contactName.text
 
                 val intent = Intent(it.context, CallActivity::class.java).apply {
-                    putExtra(CallActivity.CALLEE_KEY, callee)
-                    putExtra(CallActivity.INITIAL_STATE_KEY, CallState.OUTGOING)
+                    putExtra(Constant.CALLEE_KEY, callee)
+                    putExtra(Constant.INITIAL_STATE_KEY, CallState.OUTGOING)
                 }
                 it.context.startActivity(intent)
             }

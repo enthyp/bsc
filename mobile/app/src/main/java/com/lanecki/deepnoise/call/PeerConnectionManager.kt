@@ -12,6 +12,10 @@ class PeerConnectionManager(
     private val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback
 ) : SignallingListener {
 
+    companion object {
+        private const val TAG = "PeerConnectionManager"
+    }
+
     private val iceServer = listOf(
         PeerConnection.IceServer
             .builder("stun:stun.l.google.com:19302")
@@ -53,7 +57,6 @@ class PeerConnectionManager(
             override fun onIceCandidate(p0: IceCandidate?) {
                 super.onIceCandidate(p0)
                 p0?.let { listener.sendIceCandidate(p0) }
-                onIceCandidateReceived(p0!!)
                 Log.d(TAG, "ICE candidate from PeerConnection")
             }
 
@@ -62,10 +65,18 @@ class PeerConnectionManager(
                 p0?.audioTracks?.get(0)?.setEnabled(true)
                 Log.d(TAG, "Add stream")
             }
+
+            override fun onRenegotiationNeeded() {
+                super.onRenegotiationNeeded()
+                // TODO: this rolls us back to offer exchange
+                Log.d(TAG, "Renegotiation needed!")
+            }
         }
 
         return peerConnectionFactory.createPeerConnection(iceServer, observer)
     }
+
+    private val localStream: MediaStream
 
     init {
         WebRtcAudioUtils.setWebRtcBasedAcousticEchoCanceler(true)
@@ -75,7 +86,7 @@ class PeerConnectionManager(
         val audioConstraints = MediaConstraints()
         val audioSource = peerConnectionFactory.createAudioSource(audioConstraints);
         val localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource)
-        val localStream = peerConnectionFactory.createLocalMediaStream("101")
+        localStream = peerConnectionFactory.createLocalMediaStream("101")
         localStream.addTrack(localAudioTrack)
         peerConnection?.addStream(localStream)
     }
@@ -124,24 +135,10 @@ class PeerConnectionManager(
     override fun onOfferReceived(sessionDescription: SessionDescription) {
         Log.d(TAG, "Offer received.")
         peerConnection!!.setRemoteDescription(object : AppSdpObserver() {
-            override fun onCreateFailure(p0: String?) {
-                super.onCreateFailure(p0)
-                Log.d(TAG, "FUCK CREATE")
-            }
-            override fun onCreateSuccess(p0: SessionDescription?) {
-                super.onCreateSuccess(p0)
-                Log.d(TAG, "Remote created successfully")
-                answer()
-            }
             override fun onSetSuccess() {
                 super.onSetSuccess()
                 Log.d(TAG, "Remote set successfully")
                 answer()
-            }
-
-            override fun onSetFailure(p0: String?) {
-                super.onSetFailure(p0)
-                Log.d(TAG, p0!!)
             }
         }, sessionDescription)
     }
@@ -151,8 +148,10 @@ class PeerConnectionManager(
         peerConnection?.setRemoteDescription(AppSdpObserver(), sessionDescription)
     }
 
-    companion object {
-        private const val TAG = "PeerConnectionManager"
+    fun shutdown() {
+        // TODO: State of CallManager should be CLOSING (disable event handlers)
+        localStream.audioTracks[0].dispose()
+        peerConnection?.close()
     }
 }
 
