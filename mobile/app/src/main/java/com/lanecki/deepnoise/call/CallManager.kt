@@ -19,64 +19,98 @@ import java.nio.MappedByteBuffer
 enum class CallState {
     INCOMING,
     OUTGOING,
-    AWAITING_RESPONSE,
+    RENDEZVOUS,
     SIGNALLING,
-    CLOSING
+    CLOSING,
+    CLOSED
 }
 
-// TODO: this must be running in the background thread!
+sealed class Message
+
+// WebSocket messages
+sealed class WSMessage : Message()
+
+class LoginMsg(val nickname: String, val response: CompletableDeferred<Unit>) : WSMessage()
+object ConnectedMsg : WSMessage()
+class CallMsg(val from: String, val to: String) :WSMessage()
+class AcceptMsg(val from: String, val to: String, val callId: String) : WSMessage()
+class RefuseMsg(val from: String, val to: String, val callId: String) : WSMessage()
+class AcceptedMsg(val from: String, val to: String) : WSMessage()
+class RefusedMsg(val from: String, val to: String) : WSMessage()
+object ClosedMsg : WSMessage()
+class ErrorMsg(val reason: String) : WSMessage()
+
+// PeerConnectionManager messages
+sealed class PeerConnectionMessage : Message()
+
+class SendOfferMsg(sessionDescription: SessionDescription?) : PeerConnectionMessage()
+class SendAnswerMsg(sessionDescription: SessionDescription?) : PeerConnectionMessage()
+class SendIceCandidateMsg(iceCandidate: IceCandidate?) : PeerConnectionMessage()
+class ConnectionClosedMsg(reason: String) : PeerConnectionMessage()
+
+// Common messages
+class OfferMsg(val sessionDescription: SessionDescription) : Message()
+class AnswerMsg(val sessionDescription: SessionDescription) : Message()
+class IceCandidateMsg(val iceCandidate: IceCandidate) : Message()
+
+
 class CallManager(
     private var state: CallState,
     private val nickname: String,
     private val callee: String,
     private var callId: String?,
     private val serverAddress: String,
-    private val ui: CallUI,
+    private var ui: CallUI?,
     private val context: Context
 ) : WSListener,
-    PeerConnectionListener,
-    CoroutineScope by CoroutineScope(Dispatchers.Default) {
+    Actor<Message>(Dispatchers.Default),
+    PeerConnectionListener {
 
     private val lifecycle: CallLifecycle = InjectionUtils.provideCallLifecycle()
     private val wsClient: WSClient
     private lateinit var tfliteModel: MappedByteBuffer
     private lateinit var tflite: Interpreter
-    private lateinit var peerConnectionManager: PeerConnectionManager  // TODO: this sucks
+    private lateinit var peerConnectionManager: PeerConnectionManager
 
     init {
         lifecycle.start()
-        wsClient = WSClient(serverAddress, lifecycle)
+        wsClient = WSClient(this, serverAddress, lifecycle)
 
         try {
             tfliteModel = FileUtil.loadMappedFile(context, "identity_model.tflite")
             tflite = Interpreter(tfliteModel)
         } catch (e: IOException){
-            ui.onModelLoadFailure()
+            ui?.onModelLoadFailure()
         }
     }
 
     // Implement WSListener interface.
-    suspend fun run() = withContext(this.coroutineContext) {
-        launch { wsClient.receive(this@CallManager) }
-        wsClient.sendNickname(nickname)
+    suspend fun run() = withContext(dispatcher) {
+        launch { wsClient.run() }
 
-        if (state == CallState.OUTGOING) {
-            state = CallState.AWAITING_RESPONSE
-            launch { wsClient.send(MsgType.CALL, CallMsg(nickname, callee)) }
-            Log.d(TAG, "send CALL in $state")
-        } else {
-            val callback = audioCallback()
-            peerConnectionManager = PeerConnectionManager(this@CallManager, context, callback)
-            state = CallState.SIGNALLING
-            launch { wsClient.send(MsgType.ACCEPT, AcceptMsg(nickname, callee, callId!!)) }
-            Log.d(TAG, "send ACCEPT in $state")
+        val response = CompletableDeferred<Unit>()
+        wsClient.send(LoginMsg(nickname, response))
+        response.await()
+
+        receive { msg ->
+            if (state == CallState.OUTGOING) {
+                state = CallState.RENDEZVOUS
+                launch { wsClient.send(MsgType.CALL, CallMsg(nickname, callee)) }
+                Log.d(TAG, "send CALL in $state")
+            } else {
+                val callback = audioCallback()
+                peerConnectionManager = PeerConnectionManager(this@CallManager, context, callback)
+                state = CallState.SIGNALLING
+                launch { wsClient.send(MsgType.ACCEPT, AcceptMsg(nickname, callee, callId!!)) }
+                Log.d(TAG, "send ACCEPT in $state")
+            }
         }
     }
 
     override fun onAccepted(msg: AcceptedMsg) {
         Log.d(TAG, "onAccepted in $state")
 
-        if (state == CallState.AWAITING_RESPONSE) {
+        if (state == CallState.RENDEZVOUS) {
             val callback = audioCallback()
             peerConnectionManager = PeerConnectionManager(this@CallManager, context, callback)
             state = CallState.SIGNALLING
@@ -91,9 +125,9 @@ class CallManager(
     override fun onRefused(msg: RefusedMsg) {
         Log.d(TAG, "onRefused in $state")
 
-        if (state == CallState.AWAITING_RESPONSE) {
+        if (state == CallState.RENDEZVOUS) {
             // TODO: gracefully
-            ui.onCallRefused()
+            ui?.onCallRefused()
             state = CallState.CLOSING
             shutdown()
         } else {
@@ -155,6 +189,11 @@ class CallManager(
         launch { wsClient.send(MsgType.ICE_CANDIDATE, iceCandidate) }
     }
 
+    override fun onClosed() {
+        shutdown()
+        launch(Dispatchers.Main) { ui?.onCallEnd() } // TODO: not exactly UI then, eh?
+    }
+
     private fun audioCallback() = object : JavaAudioDeviceModule.AudioTrackProcessingCallback {
         // TODO: should be taken from some configuration (changeable maybe?)
         private val BUFFER_SIZE = 441  // number of samples
@@ -179,9 +218,15 @@ class CallManager(
     }
 
     fun shutdown() {
-        peerConnectionManager.shutdown()
-        lifecycle.stop()
-        Log.d(TAG, "shutdown in $state")
+        launch(this.coroutineContext) {
+            if (state != CallState.CLOSED && state != CallState.CLOSING) {
+                state = CallState.CLOSING
+                peerConnectionManager.shutdown()  // TODO: should depend on his state actually
+                lifecycle.stop()
+                state = CallState.CLOSED
+                Log.d(TAG, "shutdown in $state")
+            }
+        }
     }
 
     companion object {

@@ -22,11 +22,15 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.lanecki.deepnoise.call.CallManager
 import com.lanecki.deepnoise.call.CallState
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 
 // TODO: use some Android config instead of hardcoding!
-class CallActivity : AppCompatActivity(), CallUI {
+class CallActivity : AppCompatActivity(), CallUI,
+    CoroutineScope by CoroutineScope(Dispatchers.Main) {
 
     companion object {
         private const val AUDIO_PERMISSION_REQUEST_CODE = 1
@@ -72,6 +76,7 @@ class CallActivity : AppCompatActivity(), CallUI {
 
     private fun callActionFabClickListener() = View.OnClickListener {
         // TODO: change the state
+        // TODO: this should disappear when we're calling someone too!
         callActionFab.visibility = View.GONE
     }
 
@@ -91,7 +96,8 @@ class CallActivity : AppCompatActivity(), CallUI {
             window.addFlags(
                 WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
                         or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-                        or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+                        or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
         }
     }
 
@@ -124,8 +130,16 @@ class CallActivity : AppCompatActivity(), CallUI {
         finish()
     }
 
+    override fun onCallEnd() {
+        finish()
+    }
+
     private fun checkAudioPermission() {
-        if (ContextCompat.checkSelfPermission(this, AUDIO_PERMISSION) != PackageManager.PERMISSION_GRANTED) {
+        if (ContextCompat.checkSelfPermission(
+                this,
+                AUDIO_PERMISSION
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             requestAudioPermission()
         } else {
             onAudioPermissionGranted()
@@ -133,15 +147,23 @@ class CallActivity : AppCompatActivity(), CallUI {
     }
 
     private fun requestAudioPermission(dialogShown: Boolean = false) {
-        if (ActivityCompat.shouldShowRequestPermissionRationale(this, AUDIO_PERMISSION) && !dialogShown) {
+        if (ActivityCompat.shouldShowRequestPermissionRationale(
+                this,
+                AUDIO_PERMISSION
+            ) && !dialogShown
+        ) {
             showPermissionRationaleDialog()
         } else {
-            ActivityCompat.requestPermissions(this, arrayOf(AUDIO_PERMISSION), AUDIO_PERMISSION_REQUEST_CODE)
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(AUDIO_PERMISSION),
+                AUDIO_PERMISSION_REQUEST_CODE
+            )
         }
     }
 
     private fun onAudioPermissionGranted() {
-        lifecycleScope.launch { callManager.run() }
+        launch { callManager.run() }
     }
 
     private fun showPermissionRationaleDialog() {
@@ -159,7 +181,11 @@ class CallActivity : AppCompatActivity(), CallUI {
             .show()
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == AUDIO_PERMISSION_REQUEST_CODE && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
             onAudioPermissionGranted()
@@ -176,4 +202,5 @@ class CallActivity : AppCompatActivity(), CallUI {
 interface CallUI {
     fun onModelLoadFailure()
     fun onCallRefused()
+    fun onCallEnd()
 }

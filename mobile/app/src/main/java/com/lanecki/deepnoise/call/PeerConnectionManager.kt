@@ -2,9 +2,20 @@ package com.lanecki.deepnoise.call
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
 import org.webrtc.voiceengine.WebRtcAudioUtils
+import java.lang.Exception
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
+
+enum class RTCState {
+    SIGNALLING,
+    CLOSED
+}
 
 class PeerConnectionManager(
     private val listener: PeerConnectionListener,
@@ -15,6 +26,8 @@ class PeerConnectionManager(
     companion object {
         private const val TAG = "PeerConnectionManager"
     }
+
+    private var state = RTCState.SIGNALLING
 
     private val iceServer = listOf(
         PeerConnection.IceServer
@@ -71,6 +84,21 @@ class PeerConnectionManager(
                 // TODO: this rolls us back to offer exchange
                 Log.d(TAG, "Renegotiation needed!")
             }
+
+            override fun onIceConnectionChange(p0: PeerConnection.IceConnectionState?) {
+                super.onIceConnectionChange(p0)
+                when (p0) {
+                    PeerConnection.IceConnectionState.DISCONNECTED,
+                        PeerConnection.IceConnectionState.CLOSED,
+                        PeerConnection.IceConnectionState.FAILED -> {
+                        Log.d(TAG, "Connection closed: $p0")
+                        // TODO: listener can't send any more events...
+                        shutdown()
+                        listener.onClosed()
+                    }
+                    else -> {}
+                }
+            }
         }
 
         return peerConnectionFactory.createPeerConnection(iceServer, observer)
@@ -91,78 +119,65 @@ class PeerConnectionManager(
         peerConnection?.addStream(localStream)
     }
 
-    fun call() {
+    suspend fun call() = withContext(Dispatchers.Default) {
         val constraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
         }
 
-        peerConnection?.createOffer(object : AppSdpObserver() {
-            override fun onCreateSuccess(p0: SessionDescription?) {
-                peerConnection?.setLocalDescription(object : AppSdpObserver() {
-                    override fun onSetSuccess() {
-                        super.onSetSuccess()
-                        p0?.let { listener.sendOffer(p0) }
-                        Log.d(TAG, "Offer created in call.")
-                    }
-                }, p0)
-            }
-        }, constraints)
+        val offer = peerConnection?.createOfferSuspend(constraints)
+        peerConnection?.setLocalDescriptionSuspend(offer)
+        offer?.let { listener.sendOffer(offer) }
+        Log.d(TAG, "Offer created in call.")
     }
 
-    fun answer() {
+    private suspend fun answer() = withContext(Dispatchers.Default) {
         Log.d(TAG, "ANSWER CALLED")
         val constraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
         }
 
-        peerConnection?.createAnswer(object : AppSdpObserver() {
-            override fun onCreateSuccess(p0: SessionDescription?) {
-                peerConnection?.setLocalDescription(object : AppSdpObserver() {
-                    override fun onSetSuccess() {
-                        super.onSetSuccess()
-                        p0?.let { listener.sendAnswer(p0) }
-                        Log.d(TAG, "Answer created in answer.")
-                    }
-                }, p0)
-            }
-        }, constraints)
+        val answer = peerConnection?.createAnswerSuspend(constraints)
+        peerConnection?.setLocalDescriptionSuspend(answer)
+        answer?.let { listener.sendAnswer(answer) }
+        Log.d(TAG, "Answer created in answer.")
     }
 
-    override fun onIceCandidateReceived(iceCandidate: IceCandidate) {
+    override suspend fun onIceCandidateReceived(iceCandidate: IceCandidate) = withContext(Dispatchers.Default) {
         peerConnection?.addIceCandidate(iceCandidate)
+        Unit
     }
 
-    override fun onOfferReceived(sessionDescription: SessionDescription) {
+    override suspend fun onOfferReceived(sessionDescription: SessionDescription) = withContext(Dispatchers.Default) {
         Log.d(TAG, "Offer received.")
-        peerConnection!!.setRemoteDescription(object : AppSdpObserver() {
-            override fun onSetSuccess() {
-                super.onSetSuccess()
-                Log.d(TAG, "Remote set successfully")
-                answer()
-            }
-        }, sessionDescription)
+        peerConnection?.setRemoteDescriptionSuspend(sessionDescription)
+        Log.d(TAG, "Remote set successfully")
+        answer()
+        Unit
     }
 
-    override fun onAnswerReceived(sessionDescription: SessionDescription) {
+    override suspend fun onAnswerReceived(sessionDescription: SessionDescription) = withContext(Dispatchers.Default) {
         Log.d(TAG, "Answer received.")
         peerConnection?.setRemoteDescription(AppSdpObserver(), sessionDescription)
+        Unit
     }
 
     fun shutdown() {
         // TODO: State of CallManager should be CLOSING (disable event handlers)
-        localStream.audioTracks[0].dispose()
-        peerConnection?.close()
+        if (state != RTCState.CLOSED) {
+            //localStream.audioTracks[0].dispose()
+            //peerConnection?.close()
+            state = RTCState.CLOSED
+        }
     }
 }
 
-// WebRTC-related listeners.
-
+// WebRTC-related listeners
 interface SignallingListener {
-    fun onIceCandidateReceived(iceCandidate: IceCandidate)
+    suspend fun onIceCandidateReceived(iceCandidate: IceCandidate)
 
-    fun onOfferReceived(sessionDescription: SessionDescription)
+    suspend fun onOfferReceived(sessionDescription: SessionDescription)
 
-    fun onAnswerReceived(sessionDescription: SessionDescription)
+    suspend fun onAnswerReceived(sessionDescription: SessionDescription)
 }
 
 open class PeerConnectionObserver : PeerConnection.Observer {
@@ -198,3 +213,62 @@ open class AppSdpObserver : SdpObserver {
 
     override fun onCreateFailure(p0: String?) {}
 }
+
+// Coroutine extensions for PeerConnection
+class WebRTCException(reason: String?) : Exception(reason)
+
+suspend fun PeerConnection.createOfferSuspend(constraints: MediaConstraints) =
+    suspendCoroutine<SessionDescription?> { cont ->
+        createOffer(object : AppSdpObserver() {
+            override fun onCreateSuccess(p0: SessionDescription?) {
+                super.onCreateSuccess(p0)
+                cont.resume(p0)
+            }
+            override fun onCreateFailure(p0: String?) {
+                super.onCreateFailure(p0)
+                cont.resumeWithException(WebRTCException(p0))
+            }
+        }, constraints)
+    }
+
+suspend fun PeerConnection.createAnswerSuspend(constraints: MediaConstraints) =
+    suspendCoroutine<SessionDescription?> { cont ->
+        createAnswer(object : AppSdpObserver() {
+            override fun onCreateSuccess(p0: SessionDescription?) {
+                super.onCreateSuccess(p0)
+                cont.resume(p0)
+            }
+            override fun onCreateFailure(p0: String?) {
+                super.onCreateFailure(p0)
+                cont.resumeWithException(WebRTCException(p0))
+            }
+        }, constraints)
+    }
+
+suspend fun PeerConnection.setLocalDescriptionSuspend(sdp: SessionDescription?) =
+    suspendCoroutine<Unit> { cont ->
+        setLocalDescription(object : AppSdpObserver() {
+            override fun onSetSuccess() {
+                super.onSetSuccess()
+                cont.resume(Unit)
+            }
+            override fun onSetFailure(p0: String?) {
+                super.onSetFailure(p0)
+                cont.resumeWithException(WebRTCException(p0))
+            }
+        }, sdp)
+    }
+
+suspend fun PeerConnection.setRemoteDescriptionSuspend(sdp: SessionDescription?) =
+    suspendCoroutine<Unit> { cont ->
+        setRemoteDescription(object : AppSdpObserver() {
+            override fun onSetSuccess() {
+                super.onSetSuccess()
+                cont.resume(Unit)
+            }
+            override fun onSetFailure(p0: String?) {
+                super.onSetFailure(p0)
+                cont.resumeWithException(WebRTCException(p0))
+            }
+        }, sdp)
+    }

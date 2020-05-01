@@ -7,4 +7,5 @@ interface PeerConnectionListener {
     fun sendOffer(sessionDescription: SessionDescription?)
     fun sendAnswer(sessionDescription: SessionDescription?)
     fun sendIceCandidate(iceCandidate: IceCandidate?)
+    fun onClosed()
 }
