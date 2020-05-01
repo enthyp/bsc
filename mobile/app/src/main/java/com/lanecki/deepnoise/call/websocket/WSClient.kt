@@ -140,15 +140,15 @@ class WSClient(
         when (msg.type) {
             MsgType.OFFER -> {
                 val desc = gson.fromJson(msg.payload, SessionDescription::class.java)
-                listener.send(OfferMsg(desc))
+                listener.send(OfferMsg(desc, false))
             }
             MsgType.ANSWER -> {
                 val desc = gson.fromJson(msg.payload, SessionDescription::class.java)
-                listener.send(AnswerMsg(desc))
+                listener.send(AnswerMsg(desc, false))
             }
             MsgType.ICE_CANDIDATE -> {
                 val ice = gson.fromJson(msg.payload, IceCandidate::class.java)
-                listener.send(IceCandidateMsg(ice))
+                listener.send(IceCandidateMsg(ice, false))
             }
             MsgType.ACCEPTED -> {
                 val acc = gson.fromJson(msg.payload, AcceptedMsg::class.java)

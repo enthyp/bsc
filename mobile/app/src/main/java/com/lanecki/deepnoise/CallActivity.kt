@@ -16,15 +16,15 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.lanecki.deepnoise.call.AcceptMsg
 import com.lanecki.deepnoise.call.CallManager
 import com.lanecki.deepnoise.call.CallState
+import com.lanecki.deepnoise.call.RefuseMsg
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 
@@ -37,6 +37,11 @@ class CallActivity : AppCompatActivity(), CallUI,
         private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
     }
 
+    private lateinit var state: CallState
+    private lateinit var nick: String
+    private lateinit var callee: String
+    private lateinit var callId: String
+
     private lateinit var callActionFab: FloatingActionButton
     private lateinit var hangupActionFab: FloatingActionButton
 
@@ -47,14 +52,6 @@ class CallActivity : AppCompatActivity(), CallUI,
         val binding = ActivityCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        callActionFab = binding.call
-        hangupActionFab = binding.hangup
-        callActionFab.setOnClickListener(callActionFabClickListener());
-        hangupActionFab.setOnClickListener(hangupActionFabClickListener());
-
-        setupWindow()
-        setupAudio()
-
         // Initialize CallManager.
         val sharedPreferences: SharedPreferences =
             PreferenceManager.getDefaultSharedPreferences(this)
@@ -62,26 +59,44 @@ class CallActivity : AppCompatActivity(), CallUI,
         val nickKey = resources.getString(R.string.settings_nick)
         val serverAddressKey = resources.getString(R.string.settings_server_address)
 
-        val nick = sharedPreferences.getString(nickKey, "") ?: ""
+        nick = sharedPreferences.getString(nickKey, "") ?: ""
         val serverAddress = sharedPreferences.getString(serverAddressKey, "") ?: ""
 
-        val initState = intent.getSerializableExtra(Constant.INITIAL_STATE_KEY) as CallState
-        val callee = intent.getSerializableExtra(Constant.CALLEE_KEY) as String
-        val callId: String? = intent.getSerializableExtra(Constant.CALL_ID_KEY) as String?
+        state = intent.getSerializableExtra(Constant.INITIAL_STATE_KEY) as CallState
+        callee = intent.getSerializableExtra(Constant.CALLEE_KEY) as String
+        callId = intent.getSerializableExtra(Constant.CALL_ID_KEY) as String
 
-        callManager = CallManager(initState, nick, callee, callId, serverAddress, this, application)
+        callManager = CallManager(nick,serverAddress, this, application)
+
+        // Setup view
+        hangupActionFab = binding.hangup
+        hangupActionFab.setOnClickListener(hangupActionFabClickListener());
+        callActionFab = binding.call
+
+        if (state == CallState.INCOMING) {
+            callActionFab.setOnClickListener(callActionFabClickListener());
+        } else {
+            callActionFab.visibility = View.GONE
+        }
+
+        setupWindow()
+        setupAudio()
 
         checkAudioPermission()
     }
 
     private fun callActionFabClickListener() = View.OnClickListener {
-        // TODO: change the state
-        // TODO: this should disappear when we're calling someone too!
         callActionFab.visibility = View.GONE
+        if (state == CallState.INCOMING) {
+            launch { callManager.send(AcceptMsg(nick, callee, callId)) }
+        }
     }
 
     private fun hangupActionFabClickListener() = View.OnClickListener {
-        // TODO: send refusal
+        if (state == CallState.INCOMING) {
+            launch { callManager.send(RefuseMsg(nick, callee, callId)) }
+        }
+        // TODO: gotta finish closing the connection!
         finish()
     }
 

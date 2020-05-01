@@ -3,6 +3,8 @@ package com.lanecki.deepnoise.call
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
@@ -17,8 +19,9 @@ enum class RTCState {
     CLOSED
 }
 
+// TODO: to actor?
 class PeerConnectionManager(
-    private val listener: PeerConnectionListener,
+    private val listener: Actor<Message>,
     private val context: Context,
     private val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback
 ) : SignallingListener {
@@ -65,11 +68,11 @@ class PeerConnectionManager(
             .createPeerConnectionFactory()
     }
 
-    private fun buildPeerConnection(): PeerConnection? {
+    private fun buildPeerConnection(): PeerConnection? = runBlocking {
         val observer = object : PeerConnectionObserver() {
             override fun onIceCandidate(p0: IceCandidate?) {
                 super.onIceCandidate(p0)
-                p0?.let { listener.sendIceCandidate(p0) }
+                p0?.let { launch { listener.send(IceCandidateMsg(p0, true)) } }
                 Log.d(TAG, "ICE candidate from PeerConnection")
             }
 
@@ -94,14 +97,14 @@ class PeerConnectionManager(
                         Log.d(TAG, "Connection closed: $p0")
                         // TODO: listener can't send any more events...
                         shutdown()
-                        listener.onClosed()
+                        launch { listener.send(ConnectionClosedMsg("TODO")) }
                     }
                     else -> {}
                 }
             }
         }
 
-        return peerConnectionFactory.createPeerConnection(iceServer, observer)
+        return@runBlocking peerConnectionFactory.createPeerConnection(iceServer, observer)
     }
 
     private val localStream: MediaStream
@@ -119,14 +122,14 @@ class PeerConnectionManager(
         peerConnection?.addStream(localStream)
     }
 
-    suspend fun call() = withContext(Dispatchers.Default) {
+    suspend fun run() = withContext(Dispatchers.Default) {
         val constraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
         }
 
         val offer = peerConnection?.createOfferSuspend(constraints)
         peerConnection?.setLocalDescriptionSuspend(offer)
-        offer?.let { listener.sendOffer(offer) }
+        offer?.let { listener.send(OfferMsg(offer, true)) }
         Log.d(TAG, "Offer created in call.")
     }
 
@@ -138,7 +141,7 @@ class PeerConnectionManager(
 
         val answer = peerConnection?.createAnswerSuspend(constraints)
         peerConnection?.setLocalDescriptionSuspend(answer)
-        answer?.let { listener.sendAnswer(answer) }
+        answer?.let { listener.send(AnswerMsg(answer, true)) }
         Log.d(TAG, "Answer created in answer.")
     }
 
