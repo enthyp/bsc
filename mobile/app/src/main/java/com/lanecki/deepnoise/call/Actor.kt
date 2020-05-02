@@ -52,7 +52,7 @@ class ErrorMsg(val reason: String) : Message()
 // sent by WebSocket actor
 class AcceptedMsg(val from: String, val to: String) : Message()
 class RefusedMsg(val from: String, val to: String) : Message()
-class CancelledMsg(val from: String, callId: String) : Message()
+object CancelledMsg : Message()
 class HungUpMsg(val from: String, callId: String) : Message()
 
 // PeerConnectionManager messages

@@ -119,6 +119,7 @@ class CallManager(
 
     private suspend fun handleHungUp(msg: HungUpMsg) = withContext(dispatcher) {
         if (state == CallState.SIGNALLING) {
+            wsClient.send(HangupMsg)
             shutdown()
             launch(Dispatchers.Main) { ui?.onCallHungUp(msg.from) }
         }
@@ -200,7 +201,6 @@ class CallManager(
 
     private suspend fun handleConnectionClosed(msg: ConnectionClosedMsg) = withContext(dispatcher) {
         shutdown()
-        launch(Dispatchers.Main) { ui?.onCallEnd() }
     }
 
     private suspend fun handleClose() = withContext(dispatcher) {

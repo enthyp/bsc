@@ -156,7 +156,8 @@ class CallActivity : AppCompatActivity(), CallUI,
         finish()
     }
 
-    override fun onCallEnd() {
+    override fun onConnectionClosed() {
+        Toast.makeText(this, "Connection was closed...", Toast.LENGTH_LONG).show()
         finish()
     }
 
@@ -240,5 +241,5 @@ interface CallUI {
     fun onCallRefused()
     fun onCallCancelled()
     fun onCallHungUp(callee: String)
-    fun onCallEnd()
+    fun onConnectionClosed()
 }

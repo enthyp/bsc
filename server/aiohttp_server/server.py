@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+from collections import defaultdict
 from notifications import async_notify
 
 
@@ -9,6 +10,7 @@ class Server:
         self.clients = {}
         self.tokens = {}  # TODO: DB
         self.calls = {}
+        self.cancelled = defaultdict(set)
 
     def add_client(self, client):
         if client.nick not in self.clients:
@@ -47,12 +49,13 @@ class Server:
             call_id = str(uuid.uuid4())  # TODO: tb replaced by DB id (quality rating, duration etc.)
             conversation = Conversation(call_id)
             self.calls[call_id] = conversation
+
             await async_notify(token, {'type': ClientEndpoint.INCOMING, 'caller': caller, 'call_id': call_id})
             return conversation
 
     async def end_call(self, call_id):
         call = self.calls.get(call_id, None)
-        if call:
+        if call is not None:
             del self.calls[call_id]
         else:
             # TODO: throw?
@@ -62,25 +65,25 @@ class Server:
 class Conversation:
     def __init__(self, uid):
         self.uid = uid
-        self.parties = {}
+        self.endpoints = {}
 
     def join(self, client):
-        self.parties[client.nick] = client
+        self.endpoints[client.nick] = client
 
     def leave(self, client):
-        del self.parties[client.nick]
+        del self.endpoints[client.nick]
 
     async def signal(self, sender, type, msg):
-        for nick, endpoint in self.parties.items():
+        for nick, endpoint in self.endpoints.items():
             if nick != sender.nick:
                 await endpoint.send_msg(type, msg)
 
     @property
     def empty(self):
-        return not bool(self.parties)
+        return not bool(self.endpoints)
 
     def __len__(self):
-        return len(self.parties)
+        return len(self.endpoints)
 
 
 # TODO: states seem to deserve their own objects to clean it all up
@@ -170,7 +173,8 @@ class ClientEndpoint:
 
         if self.conversation is None:
             # TODO: handle errors
-            logging.error(f'Accept: call {call_id} not found')
+            logging.info(f'Accept: call {call_id} has been cancelled')
+            await self.send_msg(ClientEndpoint.CANCELLED, {})
             return
 
         caller_endpoint = self.server.get_endpoint(caller)
@@ -190,7 +194,8 @@ class ClientEndpoint:
 
         if self.conversation is None:
             # TODO: handle errors
-            logging.error(f'Refuse: call {call_id} not found')
+            logging.info(f'Refuse: call {call_id} has been cancelled')
+            await self.send_msg(ClientEndpoint.CANCELLED, {})
             return
 
         caller_endpoint = self.server.get_endpoint(caller)
@@ -199,7 +204,6 @@ class ClientEndpoint:
             logging.error(f'Refuse: user {caller} not found')
         else:
             self.conversation = None
-            self.state = ClientEndpoint.LOGGED_IN
             await caller_endpoint.on_refused_call(self.nick)
             logging.info(f'Refuse from user {self.nick} to {caller}')
 
@@ -221,15 +225,10 @@ class ClientEndpoint:
         logging.info(f'Call {uid} hangup by {self.nick}')
 
     async def cancel(self, msg):
-        # TODO: leave a message for others
         uid = self.conversation.uid
-
-        if self.conversation.empty:
-            await self.server.end_call(uid)
-        else:
-            self.conversation.signal(ClientEndpoint.CANCELLED, {'from': self.nick, 'call_id': uid})
-
+        await self.server.end_call(uid)
         self.conversation = None
+
         self.state = ClientEndpoint.LOGGED_IN
         logging.info(f'Call {uid} cancelled by {self.nick}')
 
