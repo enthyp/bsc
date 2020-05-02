@@ -53,11 +53,7 @@ class Server:
     async def end_call(self, call_id):
         call = self.calls.get(call_id, None)
         if call:
-            if call.empty:
-                del self.calls[call_id]
-            else:
-                # TODO: throw?
-                logging.error(f'Tried to end non-empty call {call_id}')
+            del self.calls[call_id]
         else:
             # TODO: throw?
             logging.error(f'Tried to end non-existent call {call_id}')
@@ -67,10 +63,6 @@ class Conversation:
     def __init__(self, uid):
         self.uid = uid
         self.parties = {}
-
-    @property
-    def empty(self):
-        return not bool(self.parties)
 
     def join(self, client):
         self.parties[client.nick] = client
@@ -82,6 +74,13 @@ class Conversation:
         for nick, endpoint in self.parties.items():
             if nick != sender.nick:
                 await endpoint.send_msg(type, msg)
+
+    @property
+    def empty(self):
+        return not bool(self.parties)
+
+    def __len__(self):
+        return len(self.parties)
 
 
 # TODO: states seem to deserve their own objects to clean it all up
@@ -106,6 +105,7 @@ class ClientEndpoint:
     ACCEPTED = 'ACCEPTED'
     REFUSED = 'REFUSED'
     CANCELLED = 'CANCELLED'
+    HUNG_UP = 'HUNG_UP'
 
     # From/to
     OFFER = 'OFFER'
@@ -157,7 +157,7 @@ class ClientEndpoint:
         callee = msg['to']
 
         self.conversation = await self.server.initiate_call(self.nick, callee)
-        if self.conversation:
+        if self.conversation is not None:
             self.state = ClientEndpoint.RENDEZVOUS
             logging.info(f'Incoming call pushed from {self.nick} to {callee}')
         else:
@@ -168,7 +168,7 @@ class ClientEndpoint:
         call_id = msg['call_id']
         self.conversation = self.server.get_call(call_id)
 
-        if not self.conversation:
+        if self.conversation is None:
             # TODO: handle errors
             logging.error(f'Accept: call {call_id} not found')
             return
@@ -188,7 +188,7 @@ class ClientEndpoint:
         call_id = msg['call_id']
         self.conversation = self.server.get_call(call_id)
 
-        if not self.conversation:
+        if self.conversation is None:
             # TODO: handle errors
             logging.error(f'Refuse: call {call_id} not found')
             return
@@ -209,16 +209,23 @@ class ClientEndpoint:
 
         if self.conversation.empty:
             self.server.end_call(uid)
+        elif len(self.conversation) == 1:
+            await self.conversation.signal(
+                self,
+                ClientEndpoint.HUNG_UP,
+                {'from': self.nick, 'call_id': uid}
+            )
 
         self.conversation = None
         self.state = ClientEndpoint.LOGGED_IN
         logging.info(f'Call {uid} hangup by {self.nick}')
 
     async def cancel(self, msg):
+        # TODO: leave a message for others
         uid = self.conversation.uid
 
         if self.conversation.empty:
-            self.server.end_call(uid)
+            await self.server.end_call(uid)
         else:
             self.conversation.signal(ClientEndpoint.CANCELLED, {'from': self.nick, 'call_id': uid})
 

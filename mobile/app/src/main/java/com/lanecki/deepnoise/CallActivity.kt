@@ -24,6 +24,7 @@ import com.lanecki.deepnoise.databinding.ActivityCallBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 
 // TODO: use some Android config instead of hardcoding!
@@ -92,10 +93,12 @@ class CallActivity : AppCompatActivity(), CallUI,
         }
     }
 
+    // TODO: fix the states (some callbacks to change it + mutex)
     private fun hangupActionFabClickListener() = View.OnClickListener {
         when (state) {
             CallState.INCOMING -> launch { callManager.send(RefuseMsg(nick, callee, callId!!)) }
             CallState.OUTGOING -> launch { callManager.send(HangupMsg) }
+            CallState.SIGNALLING -> launch { callManager.send(HangupMsg) }
         }
 
         state = CallState.CLOSED
@@ -148,7 +151,17 @@ class CallActivity : AppCompatActivity(), CallUI,
         finish()
     }
 
+    override fun onCallHungUp(callee: String) {
+        Toast.makeText(this, "Call hangup by $callee", Toast.LENGTH_LONG).show()
+        finish()
+    }
+
     override fun onCallEnd() {
+        finish()
+    }
+
+    override fun onCallCancelled() {
+        Toast.makeText(this, "Call cancelled!", Toast.LENGTH_LONG).show()
         finish()
     }
 
@@ -225,5 +238,7 @@ class CallActivity : AppCompatActivity(), CallUI,
 interface CallUI {
     fun onModelLoadFailure()
     fun onCallRefused()
+    fun onCallCancelled()
+    fun onCallHungUp(callee: String)
     fun onCallEnd()
 }

@@ -74,6 +74,7 @@ class CallManager(
                 is IncomingCallMsg -> handleIncomingCall(msg)
                 is HangupMsg -> handleHangup(msg)
                 is CancelledMsg -> handleCancelled(msg)
+                is HungUpMsg -> handleHungUp(msg)
                 is AcceptMsg -> handleAccept(msg)
                 is RefuseMsg -> handleRefuse(msg)
                 is AcceptedMsg -> handleAccepted(msg)
@@ -112,6 +113,14 @@ class CallManager(
     private suspend fun handleCancelled(msg: CancelledMsg) = withContext(dispatcher) {
         if (state == CallState.INCOMING || state == CallState.SIGNALLING) {
             shutdown()
+            launch(Dispatchers.Main) { ui?.onCallCancelled() }
+        }
+    }
+
+    private suspend fun handleHungUp(msg: HungUpMsg) = withContext(dispatcher) {
+        if (state == CallState.SIGNALLING) {
+            shutdown()
+            launch(Dispatchers.Main) { ui?.onCallHungUp(msg.from) }
         }
     }
 
@@ -138,8 +147,8 @@ class CallManager(
 
     private suspend fun handleRefused(msg: RefusedMsg) = withContext(dispatcher) {
         if (state == CallState.OUTGOING) {
-            launch(Dispatchers.Main) { ui?.onCallRefused() }
             shutdown()
+            launch(Dispatchers.Main) { ui?.onCallRefused() }
         }
     }
 

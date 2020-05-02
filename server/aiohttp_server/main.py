@@ -42,6 +42,7 @@ async def websocket_handler(request):
                 break
 
     except Exception as e:
+        # TODO: some global error handler? (CancelledError...)
         logging.error((e, type(e)))
     finally:
         logging.info('Websocket connection closed')

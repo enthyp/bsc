@@ -87,6 +87,7 @@ class WSClient(
                 is RefuseMsg -> handleRefuse(msg)
                 is HangupMsg -> handleHangup()
                 is CancelMsg -> handleCancel()
+                is HungUpMsg -> handleHungUp(msg)
                 is CancelledMsg -> handleCancelled(msg)
                 is AcceptedMsg -> handleAccepted(msg)
                 is RefusedMsg -> handleRefused(msg)
@@ -176,6 +177,10 @@ class WSClient(
                 val can = gson.fromJson(msg.payload, CancelledMsg::class.java)
                 send(can)
             }
+            MsgType.HUNG_UP -> {
+                val hun = gson.fromJson(msg.payload, HungUpMsg::class.java)
+                send(hun)
+            }
             else -> send(ErrorMsg(msg.type.toString()))
         }
     }
@@ -238,6 +243,13 @@ class WSClient(
         if (state == WSState.SIGNALLING) {
             state = WSState.CLOSING
             sendToServer(MsgType.HANGUP, Unit)
+        }
+    }
+
+    private suspend fun handleHungUp(msg: HungUpMsg) = withContext(dispatcher) {
+        if (state == WSState.SIGNALLING) {
+            state = WSState.CLOSING
+            listener.send(msg)
         }
     }
 
@@ -340,6 +352,7 @@ enum class MsgType {
     CANCEL,
     CANCELLED,
     HANGUP,
+    HUNG_UP,
     OFFER,
     ANSWER,
     ICE_CANDIDATE
