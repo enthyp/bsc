@@ -8,8 +8,6 @@ import com.lanecki.deepnoise.utils.InjectionUtils
 import kotlinx.coroutines.*
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
-import org.webrtc.IceCandidate
-import org.webrtc.SessionDescription
 import org.webrtc.audio.JavaAudioDeviceModule
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -21,39 +19,8 @@ enum class CallState {
     INCOMING,
     RENDEZVOUS,
     SIGNALLING,
-    CLOSING,
     CLOSED
 }
-
-sealed class Message
-
-// Messages from CallActivity
-sealed class CAMessage : Message()
-
-class OutgoingCallMsg(val to: String) : CAMessage()
-class IncomingCallMsg(val from: String, val callId: String) : CAMessage()
-
-// WebSocket messages
-sealed class WSMessage : Message()
-
-class LoginMsg(val nickname: String, val response: CompletableDeferred<Unit>) : WSMessage()
-object ConnectedMsg : WSMessage()
-class CallMsg(val from: String, val to: String) : WSMessage()
-class AcceptMsg(val from: String, val to: String, val callId: String) : WSMessage()
-class RefuseMsg(val from: String, val to: String, val callId: String) : WSMessage()
-class AcceptedMsg(val from: String, val to: String) : WSMessage()
-class RefusedMsg(val from: String, val to: String) : WSMessage()
-object WSClosedMsg : WSMessage()
-class ErrorMsg(val reason: String) : WSMessage()
-
-// PeerConnectionManager messages
-sealed class PeerConnectionMessage : Message()
-class ConnectionClosedMsg(reason: String) : PeerConnectionMessage()
-
-// Common messages
-class OfferMsg(val sessionDescription: SessionDescription, val out: Boolean) : WSMessage()
-class AnswerMsg(val sessionDescription: SessionDescription, val out: Boolean) : WSMessage()
-class IceCandidateMsg(val iceCandidate: IceCandidate, val out: Boolean) : WSMessage()
 
 
 class CallManager(
@@ -62,6 +29,10 @@ class CallManager(
     private var ui: CallUI?,
     private val context: Context
 ) : Actor<Message>(Dispatchers.Default) {
+
+    companion object {
+        private const val TAG = "CallManager"
+    }
 
     private val lifecycle: CallLifecycle = InjectionUtils.provideCallLifecycle()
     private val wsClient: WSClient
@@ -95,6 +66,7 @@ class CallManager(
             when(msg) {
                 is OutgoingCallMsg -> handleOutgoingCall(msg)
                 is IncomingCallMsg -> handleIncomingCall(msg)
+                is HangupMsg -> handleHangup()
                 is AcceptMsg -> handleAccept(msg)
                 is RefuseMsg -> handleRefuse(msg)
                 is AcceptedMsg -> handleAccepted(msg)
@@ -102,19 +74,9 @@ class CallManager(
                 is OfferMsg -> handleOffer(msg, msg.out)
                 is AnswerMsg -> handleAnswer(msg, msg.out)
                 is IceCandidateMsg -> handleIce(msg, msg.out)
+                is ConnectionClosedMsg -> handleConnectionClosed(msg)
                 else -> handleOther(msg)
             }
-//            if (state == CallState.OUTGOING) {
-//                state = CallState.RENDEZVOUS
-//                launch { wsClient.send(MsgType.CALL, CallMsg(nickname, callee)) }
-//                Log.d(TAG, "send CALL in $state")
-//            } else {
-//                val callback = audioCallback()
-//                peerConnectionManager = PeerConnectionManager(this@CallManager, context, callback)
-//                state = CallState.SIGNALLING
-//                launch { wsClient.send(MsgType.ACCEPT, AcceptMsg(nickname, callee, callId!!)) }
-//                Log.d(TAG, "send ACCEPT in $state")
-//            }
         }
     }
 
@@ -131,6 +93,13 @@ class CallManager(
         }
     }
 
+    private suspend fun handleHangup() = withContext(dispatcher) {
+        if (state == CallState.SIGNALLING) {
+            wsClient.send(HangupMsg)
+            shutdown()
+        }
+    }
+
     private suspend fun handleAccept(msg: AcceptMsg) = withContext(dispatcher) {
         if (state == CallState.INCOMING) {
             state = CallState.SIGNALLING
@@ -142,9 +111,8 @@ class CallManager(
 
     private suspend fun handleRefuse(msg: RefuseMsg) = withContext(dispatcher) {
         if (state == CallState.INCOMING) {
-            state = CallState.CLOSING
             wsClient.send(RefuseMsg(msg.from, msg.to, msg.callId))
-            // TODO: close! send msg?
+            shutdown()
         }
     }
 
@@ -159,8 +127,7 @@ class CallManager(
 
     private suspend fun handleRefused(msg: RefusedMsg) = withContext(dispatcher) {
         if (state == CallState.RENDEZVOUS) {
-            state = CallState.CLOSING
-            // TODO: close! send msg?
+            shutdown()
         }
     }
 
@@ -174,7 +141,7 @@ class CallManager(
         fsmError("onError")
     }
 
-    private suspend fun handleOffer(msg: OfferMsg, out: Boolean) {
+    private suspend fun handleOffer(msg: OfferMsg, out: Boolean) = withContext(dispatcher) {
         Log.d(TAG, "onOffer in $state")
 
         if (state == CallState.SIGNALLING) {
@@ -188,7 +155,7 @@ class CallManager(
         }
     }
 
-    private suspend fun handleAnswer(msg: AnswerMsg, out: Boolean) {
+    private suspend fun handleAnswer(msg: AnswerMsg, out: Boolean) = withContext(dispatcher) {
         Log.d(TAG, "onAnswer in $state")
 
         if (state == CallState.SIGNALLING) {
@@ -202,7 +169,7 @@ class CallManager(
         }
     }
 
-    private suspend fun handleIce(msg: IceCandidateMsg, out: Boolean) {
+    private suspend fun handleIce(msg: IceCandidateMsg, out: Boolean) = withContext(dispatcher) {
         Log.d(TAG, "onIce in $state")
 
         if (state == CallState.SIGNALLING) {
@@ -214,6 +181,10 @@ class CallManager(
         } else {
             fsmError("onOffer")
         }
+    }
+
+    private suspend fun handleConnectionClosed(msg: ConnectionClosedMsg) = withContext(dispatcher) {
+        shutdown()
     }
 
     private fun audioCallback() = object : JavaAudioDeviceModule.AudioTrackProcessingCallback {
@@ -239,14 +210,14 @@ class CallManager(
         Log.d(TAG, "Server error: $called in $state")
     }
 
-    fun shutdown() {
-        lifecycle.stop()
-        state = CallState.CLOSED
-        Log.d(TAG, "shutdown in $state")
-        // TODO: send poison pills?
-    }
+    fun shutdown() = runBlocking(Dispatchers.Default) {
+        if (state != CallState.CLOSED) {
+            state = CallState.CLOSED
+            wsClient.send(CancelMsg)  // TODO: wait for it
+            peerConnectionManager.close()
+            Log.d(TAG, "shutdown in $state")
 
-    companion object {
-        private const val TAG = "CallManager"
+            launch(Dispatchers.Main) { ui?.onCallEnd() }
+        }
     }
 }

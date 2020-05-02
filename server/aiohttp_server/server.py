@@ -44,16 +44,33 @@ class Server:
     async def initiate_call(self, caller, callee):
         token = self.tokens.get(callee, None)
         if token:
-            conversation = Conversation()
             call_id = str(uuid.uuid4())  # TODO: tb replaced by DB id (quality rating, duration etc.)
+            conversation = Conversation(call_id)
             self.calls[call_id] = conversation
             await async_notify(token, {'type': ClientEndpoint.INCOMING, 'caller': caller, 'call_id': call_id})
             return conversation
 
+    async def end_call(self, call_id):
+        call = self.calls.get(call_id, None)
+        if call:
+            if call.empty:
+                del self.calls[call_id]
+            else:
+                # TODO: throw?
+                logging.error(f'Tried to end non-empty call {call_id}')
+        else:
+            # TODO: throw?
+            logging.error(f'Tried to end non-existent call {call_id}')
+
 
 class Conversation:
-    def __init__(self):
+    def __init__(self, uid):
+        self.uid = uid
         self.parties = {}
+
+    @property
+    def empty(self):
+        return not bool(self.parties)
 
     def join(self, client):
         self.parties[client.nick] = client
@@ -81,6 +98,8 @@ class ClientEndpoint:
     CALL = 'CALL'
     ACCEPT = 'ACCEPT'
     REFUSE = 'REFUSE'
+    CANCEL = 'CANCEL'
+    HANGUP = 'HANGUP'
 
     # Messages to the client
     INCOMING = 'INCOMING'  # Firebase only!
@@ -106,6 +125,7 @@ class ClientEndpoint:
             (ClientEndpoint.LOGGED_IN, ClientEndpoint.CALL): self.call,
             (ClientEndpoint.LOGGED_IN, ClientEndpoint.ACCEPT): self.accept,
             (ClientEndpoint.LOGGED_IN, ClientEndpoint.REFUSE): self.refuse,
+            (ClientEndpoint.LOGGED_IN, ClientEndpoint.HANGUP): self.hangup,
             (ClientEndpoint.SIGNALLING, ClientEndpoint.OFFER): self.offer,
             (ClientEndpoint.SIGNALLING, ClientEndpoint.ANSWER): self.answer,
             (ClientEndpoint.SIGNALLING, ClientEndpoint.ICE): self.ice,
@@ -179,6 +199,16 @@ class ClientEndpoint:
             self.conversation = None
             self.state = ClientEndpoint.LOGGED_IN
             caller_endpoint.on_refused_call(self.nick)
+
+    async def hangup(self, msg):
+        self.conversation.leave(self)
+        uid = self.conversation.uid
+
+        if self.conversation.empty:
+            self.server.end_call(uid)
+        self.conversation = None
+        self.state = ClientEndpoint.LOGGED_IN
+        logging.info(f'Call {uid} hangup by {self.nick}')
 
     async def offer(self, msg):
         await self.conversation.signal(self, ClientEndpoint.OFFER, msg)

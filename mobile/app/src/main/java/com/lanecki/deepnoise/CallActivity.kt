@@ -18,10 +18,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
 import com.google.android.material.floatingactionbutton.FloatingActionButton
-import com.lanecki.deepnoise.call.AcceptMsg
-import com.lanecki.deepnoise.call.CallManager
-import com.lanecki.deepnoise.call.CallState
-import com.lanecki.deepnoise.call.RefuseMsg
+import com.lanecki.deepnoise.call.*
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -95,6 +92,8 @@ class CallActivity : AppCompatActivity(), CallUI,
     private fun hangupActionFabClickListener() = View.OnClickListener {
         if (state == CallState.INCOMING) {
             launch { callManager.send(RefuseMsg(nick, callee, callId)) }
+        } else if (state == CallState.SIGNALLING) {
+            launch { callManager.send(HangupMsg) }
         }
         // TODO: gotta finish closing the connection!
         finish()
@@ -132,8 +131,8 @@ class CallActivity : AppCompatActivity(), CallUI,
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         callManager.shutdown()
+        super.onDestroy()
     }
 
     override fun onModelLoadFailure() {

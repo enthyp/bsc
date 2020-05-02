@@ -95,9 +95,7 @@ class PeerConnectionManager(
                         PeerConnection.IceConnectionState.CLOSED,
                         PeerConnection.IceConnectionState.FAILED -> {
                         Log.d(TAG, "Connection closed: $p0")
-                        // TODO: listener can't send any more events...
-                        shutdown()
-                        launch { listener.send(ConnectionClosedMsg("TODO")) }
+                        launch { listener.send(ConnectionClosedMsg) }
                     }
                     else -> {}
                 }
@@ -164,12 +162,12 @@ class PeerConnectionManager(
         Unit
     }
 
-    fun shutdown() {
+    suspend fun close() = withContext(Dispatchers.Default) {
         // TODO: State of CallManager should be CLOSING (disable event handlers)
         if (state != RTCState.CLOSED) {
-            //localStream.audioTracks[0].dispose()
-            //peerConnection?.close()
             state = RTCState.CLOSED
+            //localStream.audioTracks[0].dispose() // TODO: ?
+            peerConnection?.close()
         }
     }
 }
