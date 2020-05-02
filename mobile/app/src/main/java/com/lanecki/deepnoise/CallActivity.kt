@@ -87,17 +87,18 @@ class CallActivity : AppCompatActivity(), CallUI,
     private fun callActionFabClickListener() = View.OnClickListener {
         callActionFab.visibility = View.GONE
         if (state == CallState.INCOMING) {
+            state = CallState.SIGNALLING
             launch { callManager.send(AcceptMsg(nick, callee, callId!!)) }
         }
     }
 
     private fun hangupActionFabClickListener() = View.OnClickListener {
-        if (state == CallState.INCOMING) {
-            launch { callManager.send(RefuseMsg(nick, callee, callId!!)) }
-        } else if (state == CallState.SIGNALLING) {
-            launch { callManager.send(HangupMsg) }
+        when (state) {
+            CallState.INCOMING -> launch { callManager.send(RefuseMsg(nick, callee, callId!!)) }
+            CallState.OUTGOING -> launch { callManager.send(HangupMsg) }
         }
-        // TODO: gotta finish closing the connection!
+
+        state = CallState.CLOSED
         finish()
     }
 
@@ -181,15 +182,17 @@ class CallActivity : AppCompatActivity(), CallUI,
 
     private fun onAudioPermissionGranted() {
         launch { callManager.run() }
-        val msg = if (state == CallState.INCOMING) IncomingCallMsg(callee, callId!!)
-            else OutgoingCallMsg(callee)
-        launch { callManager.send(msg) }
+        if (state == CallState.INCOMING) {
+            launch { callManager.send(IncomingCallMsg(callee, callId!!)) }
+        } else {
+            launch { callManager.send(OutgoingCallMsg(callee)) }
+        }
     }
 
     private fun showPermissionRationaleDialog() {
         AlertDialog.Builder(this)
-            .setTitle("Camera Permission Required")
-            .setMessage("This app need the camera to function")
+            .setTitle("Audio Permission Required")
+            .setMessage("This app need audio permission to function!")
             .setPositiveButton("Grant") { dialog, _ ->
                 dialog.dismiss()
                 requestAudioPermission(true)

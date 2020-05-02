@@ -105,6 +105,7 @@ class ClientEndpoint:
     INCOMING = 'INCOMING'  # Firebase only!
     ACCEPTED = 'ACCEPTED'
     REFUSED = 'REFUSED'
+    CANCELLED = 'CANCELLED'
 
     # From/to
     OFFER = 'OFFER'
@@ -125,7 +126,8 @@ class ClientEndpoint:
             (ClientEndpoint.LOGGED_IN, ClientEndpoint.CALL): self.call,
             (ClientEndpoint.LOGGED_IN, ClientEndpoint.ACCEPT): self.accept,
             (ClientEndpoint.LOGGED_IN, ClientEndpoint.REFUSE): self.refuse,
-            (ClientEndpoint.LOGGED_IN, ClientEndpoint.HANGUP): self.hangup,
+            (ClientEndpoint.RENDEZVOUS, ClientEndpoint.CANCEL): self.cancel,
+            (ClientEndpoint.SIGNALLING, ClientEndpoint.HANGUP): self.hangup,
             (ClientEndpoint.SIGNALLING, ClientEndpoint.OFFER): self.offer,
             (ClientEndpoint.SIGNALLING, ClientEndpoint.ANSWER): self.answer,
             (ClientEndpoint.SIGNALLING, ClientEndpoint.ICE): self.ice,
@@ -198,7 +200,8 @@ class ClientEndpoint:
         else:
             self.conversation = None
             self.state = ClientEndpoint.LOGGED_IN
-            caller_endpoint.on_refused_call(self.nick)
+            await caller_endpoint.on_refused_call(self.nick)
+            logging.info(f'Refuse from user {self.nick} to {caller}')
 
     async def hangup(self, msg):
         self.conversation.leave(self)
@@ -206,9 +209,22 @@ class ClientEndpoint:
 
         if self.conversation.empty:
             self.server.end_call(uid)
+
         self.conversation = None
         self.state = ClientEndpoint.LOGGED_IN
         logging.info(f'Call {uid} hangup by {self.nick}')
+
+    async def cancel(self, msg):
+        uid = self.conversation.uid
+
+        if self.conversation.empty:
+            self.server.end_call(uid)
+        else:
+            self.conversation.signal(ClientEndpoint.CANCELLED, {'from': self.nick, 'call_id': uid})
+
+        self.conversation = None
+        self.state = ClientEndpoint.LOGGED_IN
+        logging.info(f'Call {uid} cancelled by {self.nick}')
 
     async def offer(self, msg):
         await self.conversation.signal(self, ClientEndpoint.OFFER, msg)

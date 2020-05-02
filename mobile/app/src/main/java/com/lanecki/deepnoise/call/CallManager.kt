@@ -72,7 +72,8 @@ class CallManager(
             when(msg) {
                 is OutgoingCallMsg -> handleOutgoingCall(msg)
                 is IncomingCallMsg -> handleIncomingCall(msg)
-                is HangupMsg -> handleHangup()
+                is HangupMsg -> handleHangup(msg)
+                is CancelledMsg -> handleCancelled(msg)
                 is AcceptMsg -> handleAccept(msg)
                 is RefuseMsg -> handleRefuse(msg)
                 is AcceptedMsg -> handleAccepted(msg)
@@ -100,9 +101,16 @@ class CallManager(
         }
     }
 
-    private suspend fun handleHangup() = withContext(dispatcher) {
-        if (state == CallState.SIGNALLING) {
-            wsClient.send(HangupMsg)
+    private suspend fun handleHangup(msg: HangupMsg) = withContext(dispatcher) {
+        when (state) {
+            CallState.OUTGOING -> { wsClient.send(CancelMsg); shutdown() }
+            CallState.SIGNALLING -> { wsClient.send(msg); shutdown() }
+            else -> { /* TODO: ? */}
+        }
+    }
+
+    private suspend fun handleCancelled(msg: CancelledMsg) = withContext(dispatcher) {
+        if (state == CallState.INCOMING || state == CallState.SIGNALLING) {
             shutdown()
         }
     }
@@ -110,13 +118,13 @@ class CallManager(
     private suspend fun handleAccept(msg: AcceptMsg) = withContext(dispatcher) {
         if (state == CallState.INCOMING) {
             state = CallState.SIGNALLING
-            wsClient.send(AcceptMsg(msg.from, msg.to, msg.callId))
+            wsClient.send(msg)
         }
     }
 
     private suspend fun handleRefuse(msg: RefuseMsg) = withContext(dispatcher) {
         if (state == CallState.INCOMING) {
-            wsClient.send(RefuseMsg(msg.from, msg.to, msg.callId))
+            wsClient.send(msg)
             shutdown()
         }
     }
@@ -130,6 +138,7 @@ class CallManager(
 
     private suspend fun handleRefused(msg: RefusedMsg) = withContext(dispatcher) {
         if (state == CallState.OUTGOING) {
+            launch(Dispatchers.Main) { ui?.onCallRefused() }
             shutdown()
         }
     }
@@ -216,7 +225,7 @@ class CallManager(
     private suspend fun shutdown() = withContext(Dispatchers.Default) {
         if (state != CallState.CLOSED) {
             state = CallState.CLOSED
-            wsClient.send(CancelMsg)  // TODO: wait for it
+            wsClient.send(CloseMsg)  // TODO: wait for it
             peerConnectionManager.close()
             Log.d(TAG, "shutdown in $state")
         }

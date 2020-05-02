@@ -87,12 +87,14 @@ class WSClient(
                 is RefuseMsg -> handleRefuse(msg)
                 is HangupMsg -> handleHangup()
                 is CancelMsg -> handleCancel()
+                is CancelledMsg -> handleCancelled(msg)
                 is AcceptedMsg -> handleAccepted(msg)
                 is RefusedMsg -> handleRefused(msg)
                 is OfferMsg -> handleOffer(msg)
                 is AnswerMsg -> handleAnswer(msg)
                 is IceCandidateMsg -> handleIce(msg)
                 is ErrorMsg -> handleError(msg)
+                is CloseMsg -> handleClose()
                 else -> handleOther(msg)
             }
         }
@@ -129,7 +131,7 @@ class WSClient(
         val receiveChannel = socket.receiveSignal()
         Log.d(TAG, "Receiving...")
 
-        while (true) {
+        while (isActive) {
             try {
                 val json = receiveChannel.receive()
                 Log.d(TAG, "Got $json")
@@ -141,7 +143,7 @@ class WSClient(
                     dispatchMsg(msg)
                 }
             } catch (e: Exception) {
-                Log.d(TAG, "Fucked up with $e")
+                Log.d(TAG, "Error while receiving from server: $e")
             }
         }
     }
@@ -169,6 +171,10 @@ class WSClient(
             MsgType.REFUSED -> {
                 val ref = gson.fromJson(msg.payload, RefusedMsg::class.java)
                 send(ref)
+            }
+            MsgType.CANCELLED -> {
+                val can = gson.fromJson(msg.payload, CancelledMsg::class.java)
+                send(can)
             }
             else -> send(ErrorMsg(msg.type.toString()))
         }
@@ -215,10 +221,17 @@ class WSClient(
     }
 
     private suspend fun handleCancel() = withContext(dispatcher) {
-        state = WSState.CLOSED
-        // TODO: send cancel to server + make CallManager send cancel instead of hangup
-        lifecycle.stop()
-        // TODO: a response to wait on?
+        if (state == WSState.RENDEZVOUS) {
+            state = WSState.CLOSING
+            sendToServer(MsgType.CANCEL, Unit)
+        }
+    }
+
+    private suspend fun handleCancelled(msg: CancelledMsg) = withContext(dispatcher) {
+        if (state == WSState.LOGGED_IN || state == WSState.SIGNALLING) {
+            state = WSState.CLOSING
+            listener.send(msg)
+        }
     }
 
     private suspend fun handleHangup() = withContext(dispatcher) {
@@ -280,6 +293,17 @@ class WSClient(
         // TODO: what else??
     }
 
+    private suspend fun handleClose() {
+        if (state == WSState.SIGNALLING || state == WSState.CLOSING) {
+            state = WSState.CLOSED
+            lifecycle.stop()
+            // TODO: a response to wait on?
+        } else {
+            throw Exception("WSClient: CLOSE message received in state $state")
+        }
+    }
+
+
     private suspend fun handleOther(msg: Message) {
         Log.d(TAG, "Received unhandled msg $msg from server")
         // TODO: what else??
@@ -314,6 +338,7 @@ enum class MsgType {
     REFUSE,
     REFUSED,
     CANCEL,
+    CANCELLED,
     HANGUP,
     OFFER,
     ANSWER,
