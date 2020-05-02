@@ -1,12 +1,11 @@
 package com.lanecki.deepnoise.call
 
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
+import android.util.Log
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.withContext
 import org.webrtc.IceCandidate
 import org.webrtc.SessionDescription
+import java.lang.Exception
 
 // Poor man's actor until some new API takes off
 // TODO:
@@ -14,16 +13,28 @@ import org.webrtc.SessionDescription
 //  - queue size
 open class Actor<T>(protected val dispatcher: CoroutineDispatcher) {
 
-    private val inbox = Channel<T>()
+    private val inbox = Channel<T>(Channel.UNLIMITED)
 
-    suspend fun send(msg: T) {
+    suspend fun send(msg: T) = withContext(dispatcher) {
+        Log.d("ACTOR", "PRE INBOXED $msg ${Thread.currentThread().name}")
         inbox.send(msg)
+        Log.d("ACTOR", "INBOXED $msg ${Thread.currentThread().name}")
     }
 
     suspend fun receive(block: suspend CoroutineScope.(T) -> Unit) = withContext(dispatcher) {
-        for (msg in inbox) {
-            block(msg)
+        try {
+            while (true) {
+                val msg = inbox.receive()
+                Log.d("ACTOR", "Pre $msg ${Thread.currentThread().name}")
+                block(msg)
+                Log.d("ACTOR", "Post $msg ${Thread.currentThread().name}")
+            }
+        } catch (e: Exception) {
+            Log.d("ACTOR", "Receive error $e")
         }
+        //        for (msg in inbox) {
+//            block(msg)
+//        }
     }
 }
 
@@ -35,6 +46,7 @@ sealed class Message
 
 class OutgoingCallMsg(val to: String) : Message()
 class IncomingCallMsg(val from: String, val callId: String) : Message()
+object CloseMsg : Message()
 
 // WebSocket messages
 

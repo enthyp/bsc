@@ -2,10 +2,7 @@ package com.lanecki.deepnoise.call
 
 import android.content.Context
 import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
 import org.webrtc.voiceengine.WebRtcAudioUtils
@@ -42,9 +39,7 @@ class PeerConnectionManager(
         buildPeerConnectionFactory(context)
     }
 
-    private val peerConnection: PeerConnection? by lazy {
-        buildPeerConnection()
-    }
+    private var peerConnection: PeerConnection? = null
 
     private fun buildPeerConnectionFactory(context: Context): PeerConnectionFactory {
         // Initialize PeerConnectionFactory options.
@@ -68,12 +63,12 @@ class PeerConnectionManager(
             .createPeerConnectionFactory()
     }
 
-    private fun buildPeerConnection(): PeerConnection? = runBlocking {
+    private suspend fun buildPeerConnection(coroutineScope: CoroutineScope): PeerConnection? {
         val observer = object : PeerConnectionObserver() {
             override fun onIceCandidate(p0: IceCandidate?) {
                 super.onIceCandidate(p0)
-                p0?.let { launch { listener.send(IceCandidateMsg(p0, true)) } }
-                Log.d(TAG, "ICE candidate from PeerConnection")
+                p0?.let { coroutineScope.launch { listener.send(IceCandidateMsg(p0, true)) } }
+                Log.d(TAG, "ICE candidate $p0 from PeerConnection")
             }
 
             override fun onAddStream(p0: MediaStream?) {
@@ -95,52 +90,43 @@ class PeerConnectionManager(
                         PeerConnection.IceConnectionState.CLOSED,
                         PeerConnection.IceConnectionState.FAILED -> {
                         Log.d(TAG, "Connection closed: $p0")
-                        launch { listener.send(ConnectionClosedMsg) }
+                        coroutineScope.launch { listener.send(ConnectionClosedMsg) }
                     }
                     else -> {}
                 }
             }
         }
 
-        return@runBlocking peerConnectionFactory.createPeerConnection(iceServer, observer)
+        return peerConnectionFactory.createPeerConnection(iceServer, observer)
     }
 
-    private val localStream: MediaStream
+    private val audioConstraints: MediaConstraints
 
     init {
         WebRtcAudioUtils.setWebRtcBasedAcousticEchoCanceler(true)
         WebRtcAudioUtils.setWebRtcBasedNoiseSuppressor(true)
         WebRtcAudioUtils.setWebRtcBasedAutomaticGainControl(true)
+        audioConstraints = MediaConstraints().apply {
+            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
+        }
+    }
 
-        val audioConstraints = MediaConstraints()
+    suspend fun init(coroutineScope: CoroutineScope) {
+        peerConnection = buildPeerConnection(coroutineScope)
         val audioSource = peerConnectionFactory.createAudioSource(audioConstraints);
         val localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource)
-        localStream = peerConnectionFactory.createLocalMediaStream("101")
+        val localStream = peerConnectionFactory.createLocalMediaStream("101")
         localStream.addTrack(localAudioTrack)
         peerConnection?.addStream(localStream)
     }
 
-    suspend fun run() = withContext(Dispatchers.Default) {
-        val constraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
-        }
-
-        val offer = peerConnection?.createOfferSuspend(constraints)
+    // TODO: handle null pc, offers, answers...
+    suspend fun call() = withContext(Dispatchers.Default) {
+        val offer = peerConnection?.createOfferSuspend(audioConstraints)
         peerConnection?.setLocalDescriptionSuspend(offer)
         offer?.let { listener.send(OfferMsg(offer, true)) }
+
         Log.d(TAG, "Offer created in call.")
-    }
-
-    private suspend fun answer() = withContext(Dispatchers.Default) {
-        Log.d(TAG, "ANSWER CALLED")
-        val constraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
-        }
-
-        val answer = peerConnection?.createAnswerSuspend(constraints)
-        peerConnection?.setLocalDescriptionSuspend(answer)
-        answer?.let { listener.send(AnswerMsg(answer, true)) }
-        Log.d(TAG, "Answer created in answer.")
     }
 
     override suspend fun onIceCandidateReceived(iceCandidate: IceCandidate) = withContext(Dispatchers.Default) {
@@ -149,10 +135,13 @@ class PeerConnectionManager(
     }
 
     override suspend fun onOfferReceived(sessionDescription: SessionDescription) = withContext(Dispatchers.Default) {
-        Log.d(TAG, "Offer received.")
         peerConnection?.setRemoteDescriptionSuspend(sessionDescription)
         Log.d(TAG, "Remote set successfully")
-        answer()
+
+        val answer = peerConnection?.createAnswerSuspend(audioConstraints)
+        peerConnection?.setLocalDescriptionSuspend(answer)
+        answer?.let { listener.send(AnswerMsg(answer, true)) }
+        Log.d(TAG, "Answer $answer created in answer.")
         Unit
     }
 

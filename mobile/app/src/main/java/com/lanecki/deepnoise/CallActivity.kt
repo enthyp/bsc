@@ -8,6 +8,7 @@ import android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET
 import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.Window
 import android.view.WindowManager
@@ -30,6 +31,7 @@ class CallActivity : AppCompatActivity(), CallUI,
     CoroutineScope by CoroutineScope(Dispatchers.Main) {
 
     companion object {
+        private const val TAG = "CallActivity"
         private const val AUDIO_PERMISSION_REQUEST_CODE = 1
         private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
     }
@@ -37,7 +39,7 @@ class CallActivity : AppCompatActivity(), CallUI,
     private lateinit var state: CallState
     private lateinit var nick: String
     private lateinit var callee: String
-    private lateinit var callId: String
+    private var callId: String? = null
 
     private lateinit var callActionFab: FloatingActionButton
     private lateinit var hangupActionFab: FloatingActionButton
@@ -61,9 +63,9 @@ class CallActivity : AppCompatActivity(), CallUI,
 
         state = intent.getSerializableExtra(Constant.INITIAL_STATE_KEY) as CallState
         callee = intent.getSerializableExtra(Constant.CALLEE_KEY) as String
-        callId = intent.getSerializableExtra(Constant.CALL_ID_KEY) as String
+        callId = intent.getSerializableExtra(Constant.CALL_ID_KEY) as String?
 
-        callManager = CallManager(nick,serverAddress, this, application)
+        callManager = CallManager(nick, serverAddress, this, application)
 
         // Setup view
         hangupActionFab = binding.hangup
@@ -85,13 +87,13 @@ class CallActivity : AppCompatActivity(), CallUI,
     private fun callActionFabClickListener() = View.OnClickListener {
         callActionFab.visibility = View.GONE
         if (state == CallState.INCOMING) {
-            launch { callManager.send(AcceptMsg(nick, callee, callId)) }
+            launch { callManager.send(AcceptMsg(nick, callee, callId!!)) }
         }
     }
 
     private fun hangupActionFabClickListener() = View.OnClickListener {
         if (state == CallState.INCOMING) {
-            launch { callManager.send(RefuseMsg(nick, callee, callId)) }
+            launch { callManager.send(RefuseMsg(nick, callee, callId!!)) }
         } else if (state == CallState.SIGNALLING) {
             launch { callManager.send(HangupMsg) }
         }
@@ -131,8 +133,9 @@ class CallActivity : AppCompatActivity(), CallUI,
     }
 
     override fun onDestroy() {
-        callManager.shutdown()
+        launch { callManager.send(CloseMsg) }
         super.onDestroy()
+        Log.d(TAG, "Destroyed!")
     }
 
     override fun onModelLoadFailure() {
@@ -178,6 +181,9 @@ class CallActivity : AppCompatActivity(), CallUI,
 
     private fun onAudioPermissionGranted() {
         launch { callManager.run() }
+        val msg = if (state == CallState.INCOMING) IncomingCallMsg(callee, callId!!)
+            else OutgoingCallMsg(callee)
+        launch { callManager.send(msg) }
     }
 
     private fun showPermissionRationaleDialog() {

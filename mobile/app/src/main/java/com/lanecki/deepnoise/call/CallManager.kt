@@ -17,12 +17,12 @@ import java.nio.MappedByteBuffer
 enum class CallState {
     INIT,
     INCOMING,
-    RENDEZVOUS,
+    OUTGOING,
     SIGNALLING,
     CLOSED
 }
 
-
+// TODO: some error on call to self? xd
 class CallManager(
     private val nickname: String,
     private val serverAddress: String,
@@ -38,7 +38,7 @@ class CallManager(
     private val wsClient: WSClient
     private lateinit var tfliteModel: MappedByteBuffer
     private lateinit var tflite: Interpreter
-    private lateinit var peerConnectionManager: PeerConnectionManager
+    private val peerConnectionManager: PeerConnectionManager
 
     private var state = CallState.INIT
 
@@ -52,17 +52,23 @@ class CallManager(
         } catch (e: IOException){
             ui?.onModelLoadFailure()
         }
+
+        val callback = audioCallback()
+        peerConnectionManager = PeerConnectionManager(this@CallManager, context, callback)
     }
 
     // Implement WSListener interface.
     suspend fun run() = withContext(dispatcher) {
         launch { wsClient.run() }
+        peerConnectionManager.init(this)
 
         val response = CompletableDeferred<Unit>()
         wsClient.send(LoginMsg(nickname, response))
         response.await()
 
         receive { msg ->
+            Log.d(TAG, "Received $msg in state $state")
+
             when(msg) {
                 is OutgoingCallMsg -> handleOutgoingCall(msg)
                 is IncomingCallMsg -> handleIncomingCall(msg)
@@ -75,6 +81,7 @@ class CallManager(
                 is AnswerMsg -> handleAnswer(msg, msg.out)
                 is IceCandidateMsg -> handleIce(msg, msg.out)
                 is ConnectionClosedMsg -> handleConnectionClosed(msg)
+                is CloseMsg -> handleClose()
                 else -> handleOther(msg)
             }
         }
@@ -82,7 +89,7 @@ class CallManager(
 
     private suspend fun handleOutgoingCall(msg: OutgoingCallMsg) = withContext(dispatcher) {
         if (state == CallState.INIT) {
-            state = CallState.RENDEZVOUS
+            state = CallState.OUTGOING
             wsClient.send(CallMsg(nickname, msg.to))
         }
     }
@@ -103,9 +110,7 @@ class CallManager(
     private suspend fun handleAccept(msg: AcceptMsg) = withContext(dispatcher) {
         if (state == CallState.INCOMING) {
             state = CallState.SIGNALLING
-            val callback = audioCallback()
-            peerConnectionManager = PeerConnectionManager(this@CallManager, context, callback)
-            wsClient.send(AcceptMsg(nickname, msg.from, msg.callId))
+            wsClient.send(AcceptMsg(msg.from, msg.to, msg.callId))
         }
     }
 
@@ -117,16 +122,14 @@ class CallManager(
     }
 
     private suspend fun handleAccepted(msg: AcceptedMsg) = withContext(dispatcher) {
-        if (state == CallState.RENDEZVOUS) {
+        if (state == CallState.OUTGOING) {
             state = CallState.SIGNALLING
-            val callback = audioCallback()
-            peerConnectionManager = PeerConnectionManager(this@CallManager, context, callback)
-            launch { peerConnectionManager.run() }
+            launch { peerConnectionManager.call() }
         }
     }
 
     private suspend fun handleRefused(msg: RefusedMsg) = withContext(dispatcher) {
-        if (state == CallState.RENDEZVOUS) {
+        if (state == CallState.OUTGOING) {
             shutdown()
         }
     }
@@ -142,8 +145,6 @@ class CallManager(
     }
 
     private suspend fun handleOffer(msg: OfferMsg, out: Boolean) = withContext(dispatcher) {
-        Log.d(TAG, "onOffer in $state")
-
         if (state == CallState.SIGNALLING) {
             if (out) {
                 wsClient.send(msg)
@@ -156,8 +157,6 @@ class CallManager(
     }
 
     private suspend fun handleAnswer(msg: AnswerMsg, out: Boolean) = withContext(dispatcher) {
-        Log.d(TAG, "onAnswer in $state")
-
         if (state == CallState.SIGNALLING) {
             if (out) {
                 wsClient.send(msg)
@@ -165,13 +164,11 @@ class CallManager(
                 peerConnectionManager.onAnswerReceived(msg.sessionDescription)
             }
         } else {
-            fsmError("onOffer")
+            fsmError("onAnswer")
         }
     }
 
     private suspend fun handleIce(msg: IceCandidateMsg, out: Boolean) = withContext(dispatcher) {
-        Log.d(TAG, "onIce in $state")
-
         if (state == CallState.SIGNALLING) {
             if (out) {
                 wsClient.send(msg)
@@ -179,11 +176,16 @@ class CallManager(
                 peerConnectionManager.onIceCandidateReceived(msg.iceCandidate)
             }
         } else {
-            fsmError("onOffer")
+            fsmError("onIce")
         }
     }
 
     private suspend fun handleConnectionClosed(msg: ConnectionClosedMsg) = withContext(dispatcher) {
+        shutdown()
+        launch(Dispatchers.Main) { ui?.onCallEnd() }
+    }
+
+    private suspend fun handleClose() = withContext(dispatcher) {
         shutdown()
     }
 
@@ -210,14 +212,13 @@ class CallManager(
         Log.d(TAG, "Server error: $called in $state")
     }
 
-    fun shutdown() = runBlocking(Dispatchers.Default) {
+    // TODO: cancellation?
+    private suspend fun shutdown() = withContext(Dispatchers.Default) {
         if (state != CallState.CLOSED) {
             state = CallState.CLOSED
             wsClient.send(CancelMsg)  // TODO: wait for it
             peerConnectionManager.close()
             Log.d(TAG, "shutdown in $state")
-
-            launch(Dispatchers.Main) { ui?.onCallEnd() }
         }
     }
 }

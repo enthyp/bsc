@@ -77,6 +77,8 @@ class WSClient(
 
         launch { receiveServerMsg() }
         receive { msg ->
+            Log.d(TAG, "Received $msg in state $state")
+
             when(msg) {
                 is ConnectedMsg -> handleConnected()
                 is LoginMsg -> handleLogin(msg)
