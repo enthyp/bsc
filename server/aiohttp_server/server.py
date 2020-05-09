@@ -212,7 +212,7 @@ class ClientEndpoint:
         uid = self.conversation.uid
 
         if self.conversation.empty:
-            self.server.end_call(uid)
+            await self.server.end_call(uid)
         elif len(self.conversation) == 1:
             await self.conversation.signal(
                 self,
@@ -234,6 +234,8 @@ class ClientEndpoint:
 
     async def offer(self, msg):
         await self.conversation.signal(self, ClientEndpoint.OFFER, msg)
+        from pprint import pprint
+        pprint(msg)
         logging.info(f'Offer published by {self.nick}: {msg}')
 
     async def answer(self, msg):

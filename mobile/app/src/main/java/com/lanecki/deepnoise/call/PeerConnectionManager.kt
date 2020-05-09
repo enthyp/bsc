@@ -5,6 +5,7 @@ import android.util.Log
 import kotlinx.coroutines.*
 import org.webrtc.*
 import org.webrtc.audio.JavaAudioDeviceModule
+import org.webrtc.voiceengine.WebRtcAudioManager
 import org.webrtc.voiceengine.WebRtcAudioUtils
 import java.lang.Exception
 import kotlin.coroutines.resume
@@ -106,6 +107,7 @@ class PeerConnectionManager(
         WebRtcAudioUtils.setWebRtcBasedAcousticEchoCanceler(true)
         WebRtcAudioUtils.setWebRtcBasedNoiseSuppressor(true)
         WebRtcAudioUtils.setWebRtcBasedAutomaticGainControl(true)
+        WebRtcAudioUtils.setDefaultSampleRateHz(16000)
         audioConstraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
         }
