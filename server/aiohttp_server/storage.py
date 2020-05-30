@@ -13,7 +13,8 @@ users = sa.Table(
 create_user_table = ('CREATE TABLE IF NOT EXISTS users('
                      'id SERIAL PRIMARY KEY, '
                      'login VARCHAR (100) UNIQUE NOT NULL, '
-                     'passwd VARCHAR (500) NOT NULL);')
+                     'password VARCHAR (100) NOT NULL, '
+                     'token VARCHAR (100) NOT NULL);')
 
 
 class DBStorage:
@@ -44,7 +45,7 @@ class DBStorage:
 
 
 async def get_engine(config):
-    return await aiosa.create_engine(config.db_url)
+    return await aiosa.create_engine(config.get('DATABASE', 'URL'))
 
 
 async def cleanup_storage(app):
@@ -54,7 +55,7 @@ async def cleanup_storage(app):
 def setup_db(app, config):
     async def _setup(app):
         engine = await get_engine(config)
-        app['storage'] = Storage(engine)
+        app['storage'] = DBStorage(engine)
 
         # Create tables.
         async with engine.acquire() as conn:

@@ -1,3 +1,4 @@
+import configparser
 import json
 import logging
 import aiohttp
@@ -6,6 +7,7 @@ from aiohttp import web
 
 from notifications import setup_notifications
 from server import ClientEndpoint, Server
+from storage import setup_db
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 routes = web.RouteTableDef()
@@ -60,9 +62,14 @@ async def token_handler(request):
 
 
 def main():
-    setup_notifications()
+    parser = configparser.ConfigParser()
+    parser.read('config.ini')
 
     app = web.Application()
+
+    setup_db(app, parser)
+    setup_notifications(parser)
+
     app['server'] = Server()
     app.add_routes([
         web.get('/', websocket_handler),

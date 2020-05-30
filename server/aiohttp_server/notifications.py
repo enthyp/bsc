@@ -1,5 +1,4 @@
 import asyncio
-import configparser
 import logging
 import firebase_admin
 from firebase_admin import credentials, messaging
@@ -26,8 +25,6 @@ def notify(token, payload):
     messaging.send(message)
 
 
-def setup_notifications():
-    parser = configparser.ConfigParser()
-    parser.read('config.ini')
-    cred = credentials.Certificate(parser.get('GOOGLE CREDENTIALS', 'PATH'))
+def setup_notifications(config):
+    cred = credentials.Certificate(config.get('GOOGLE CREDENTIALS', 'PATH'))
     firebase_admin.initialize_app(cred)
