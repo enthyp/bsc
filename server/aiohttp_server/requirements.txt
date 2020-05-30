@@ -1,2 +1,6 @@
 aiohttp
+aiohttp_security[session]
+aiopg
+bcrypt
 firebase-admin
+sqlalchemy
