@@ -6,11 +6,17 @@ from server.notifications import async_notify
 
 
 class Server:
-    def __init__(self):
+    def __init__(self, storage):
         self.clients = {}
-        self.tokens = {}  # TODO: DB
+        self.tokens = {}
+        self.storage = storage
         self.calls = {}
         self.cancelled = defaultdict(set)
+
+    async def setup(self):
+        user_tokens = await self.storage.get_tokens()
+        for entry in user_tokens:
+            self.tokens[entry[0]] = entry[1]
 
     def add_client(self, client):
         if client.nick not in self.clients:
@@ -39,9 +45,10 @@ class Server:
         # TODO: handle error
         return self.calls.get(call_id, None)
 
-    def on_token(self, identity, token):
+    async def on_token(self, identity, token):
         self.tokens[identity] = token  # TODO: DB
-        logging.info(f'Token received for user {identity}')
+        await self.storage.insert_token(identity, token)
+        logging.info(f'Token saved for user {identity}')
 
     async def initiate_call(self, caller, callee):
         token = self.tokens.get(callee, None)
@@ -270,3 +277,12 @@ class ClientEndpoint:
         payload_json = json.dumps(payload)
         ws_msg = json.dumps({'type': type, 'payload': payload_json})
         await self.socket.send_json(ws_msg)
+
+
+def setup_server(app):
+    async def _setup(app):
+        server = Server(app['storage'])
+        await server.setup()
+        app['server'] = server
+
+    app.on_startup.append(_setup)

@@ -11,7 +11,7 @@ from aiohttp_security import (
 
 from server.auth import check_credentials, setup_auth
 from server.notifications import setup_notifications
-from server.serving import ClientEndpoint, Server
+from server.serving import ClientEndpoint, setup_server
 from server.storage import setup_db
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
@@ -64,7 +64,8 @@ async def token_handler(request):
     login = await authorized_userid(request)
 
     token = await request.text()
-    request.app['server'].on_token(login, token)
+    logging.info(f'TOKEN: {token}')
+    await request.app['server'].on_token(login, token)
 
     return web.Response()
 
@@ -77,7 +78,7 @@ async def handle_login(request):
     except KeyError:
         raise web.HTTPBadRequest()
 
-    logging.info("LOGIN: {} {}".format(login, pwd))
+    logging.info("LOGIN: {}".format(login))
     storage = request.app['storage']
     if await check_credentials(storage, login, pwd):
         response = web.HTTPOk()
@@ -104,8 +105,8 @@ def main():
     setup_db(app, parser)
     setup_notifications(parser)
     setup_auth(app)
+    setup_server(app)
 
-    app['server'] = Server()
     app.add_routes(routes)
     web.run_app(app, host='192.168.100.106', port=5000)
 

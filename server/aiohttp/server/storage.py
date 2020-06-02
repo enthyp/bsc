@@ -7,14 +7,14 @@ users = sa.Table(
     sa.Column('id', sa.Integer, primary_key=True),
     sa.Column('login', sa.String(100), unique=True, nullable=False),
     sa.Column('password', sa.String(100), nullable=False),
-    sa.Column('token', sa.String(100), nullable=False),
+    sa.Column('token', sa.String(4096), nullable=False),
 )
 
 create_user_table = ('CREATE TABLE IF NOT EXISTS users('
                      'id SERIAL PRIMARY KEY, '
                      'login VARCHAR (100) UNIQUE NOT NULL, '
                      'password VARCHAR (100) NOT NULL, '
-                     'token VARCHAR (100));')
+                     'token VARCHAR (4096));')
 
 
 class DBStorage:
@@ -42,6 +42,18 @@ class DBStorage:
                 if user:
                     return user['password']
             return None
+
+    async def get_tokens(self):
+        async with self.db.acquire() as conn:
+            s_query = sa.select([users.c.login, users.c.token])
+            res = await conn.execute(s_query)
+
+            return await res.fetchall()
+
+    async def insert_token(self, login, token):
+        async with self.db.acquire() as conn:
+            i_query = users.update().where(users.c.login == login).values(token=token)
+            await conn.execute(i_query)
 
 
 async def get_engine(config):
