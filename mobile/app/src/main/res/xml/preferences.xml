@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.preference.PreferenceScreen
-    xmlns:app="http://schemas.android.com/apk/res-auto">
+<androidx.preference.PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:android="http://schemas.android.com/apk/res/android">
 
     <EditTextPreference
-        app:key="@string/settings_nick"
-        app:title="Nickname"
-        app:summary="Set nickname"/>
+        app:key="@string/settings_login"
+        app:title="Login"
+        app:summary="Set login"/>
+
+    <EditTextPreference
+        app:key="@string/settings_password"
+        app:title="Password"
+        app:summary="Set password"
+        android:inputType="textPassword"/>
 
     <EditTextPreference
         app:key="@string/settings_server_address"

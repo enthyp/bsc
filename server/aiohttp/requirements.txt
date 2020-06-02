@@ -1,6 +1,8 @@
+-e .
 aiohttp
 aiohttp_security[session]
 aiopg
 bcrypt
+fernet
 firebase-admin
 sqlalchemy

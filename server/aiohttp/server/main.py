@@ -4,10 +4,15 @@ import logging
 import aiohttp
 import sys
 from aiohttp import web
+from aiohttp_security import (
+    remember, forget, check_authorized,
+    authorized_userid
+)
 
-from notifications import setup_notifications
-from server import ClientEndpoint, Server
-from storage import setup_db
+from server.auth import check_credentials, setup_auth
+from server.notifications import setup_notifications
+from server.serving import ClientEndpoint, Server
+from server.storage import setup_db
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 routes = web.RouteTableDef()
@@ -53,29 +58,55 @@ async def websocket_handler(request):
     return ws
 
 
+@routes.post('/token')
 async def token_handler(request):
-    body = await request.json()
-    identity, token = body['id'], body['token']
-    request.app['server'].on_token(identity, token)
+    await check_authorized(request)
+    login = await authorized_userid(request)
+
+    token = await request.text()
+    request.app['server'].on_token(login, token)
 
     return web.Response()
 
 
+@routes.post('/login')
+async def handle_login(request):
+    body = await request.json()
+    try:
+        login, pwd = body['login'], body['password']
+    except KeyError:
+        raise web.HTTPBadRequest()
+
+    logging.info("LOGIN: {} {}".format(login, pwd))
+    storage = request.app['storage']
+    if await check_credentials(storage, login, pwd):
+        response = web.HTTPOk()
+        await remember(request, response, login)
+        raise response
+    else:
+        raise web.HTTPUnauthorized()
+
+
+@routes.post('/logout')
+async def handle_logout(request):
+    logging.info("LOGOUT")
+    response = web.HTTPOk()
+    await forget(request, response)
+    raise response
+
+
 def main():
     parser = configparser.ConfigParser()
-    parser.read('config.ini')
+    parser.read('../config.ini')
 
     app = web.Application()
 
     setup_db(app, parser)
     setup_notifications(parser)
+    setup_auth(app)
 
     app['server'] = Server()
-    app.add_routes([
-        web.get('/', websocket_handler),
-        web.post('/token', token_handler)
-    ])
-
+    app.add_routes(routes)
     web.run_app(app, host='192.168.100.106', port=5000)
 
 

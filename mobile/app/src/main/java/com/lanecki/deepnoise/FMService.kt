@@ -28,7 +28,7 @@ class FMService : FirebaseMessagingService() {
 
     private fun sendRegistrationToServer(token: String) {
         val backendService = BackendService.getInstance()
-        backendService.scheduleTokenUpdate(this, token)
+        backendService.scheduleUpdateToken(this, token)
     }
 
     private fun notifyIncomingCall(data: MutableMap<String, String>) {

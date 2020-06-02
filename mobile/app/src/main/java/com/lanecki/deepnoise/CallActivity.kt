@@ -24,7 +24,6 @@ import com.lanecki.deepnoise.databinding.ActivityCallBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 
 // TODO: use some Android config instead of hardcoding!
@@ -56,7 +55,7 @@ class CallActivity : AppCompatActivity(), CallUI,
         val sharedPreferences: SharedPreferences =
             PreferenceManager.getDefaultSharedPreferences(this)
 
-        val nickKey = resources.getString(R.string.settings_nick)
+        val nickKey = resources.getString(R.string.settings_login)
         val serverAddressKey = resources.getString(R.string.settings_server_address)
 
         nick = sharedPreferences.getString(nickKey, "") ?: ""

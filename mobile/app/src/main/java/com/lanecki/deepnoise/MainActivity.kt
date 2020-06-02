@@ -38,7 +38,7 @@ class MainActivity : AppCompatActivity() {
                     token?.let {
                         // TODO: error handling
                         val backendService = BackendService.getInstance()
-                        backendService.scheduleTokenUpdate(this@MainActivity, token)
+                        backendService.scheduleUpdateToken(this@MainActivity, token)
 
                         val msg = "Token sending scheduled."
                         Log.d(TAG, msg)

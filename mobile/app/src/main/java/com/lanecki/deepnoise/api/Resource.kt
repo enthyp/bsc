@@ -1,17 +1,17 @@
 package com.lanecki.deepnoise.api
 
-data class Resource<out T>(val status: Status, val data: T?, val message: String?) {
+data class Resource<out T>(val status: Status, val data: T?, val message: String?, val errorCode: Int?) {
     companion object {
         fun <T> success(data: T?): Resource<T> {
-            return Resource(Status.SUCCESS, data, null)
+            return Resource(Status.SUCCESS, data, null, null)
         }
 
-        fun <T> error(msg: String, data: T?): Resource<T> {
-            return Resource(Status.ERROR, data, msg)
+        fun <T> error(msg: String, errorCode: Int?, data: T?): Resource<T> {
+            return Resource(Status.ERROR, data, msg, errorCode)
         }
 
         fun <T> loading(data: T?): Resource<T> {
-            return Resource(Status.LOADING, data, null)
+            return Resource(Status.LOADING, data, null, null)
         }
     }
 }

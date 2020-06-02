@@ -2,7 +2,7 @@ import json
 import logging
 import uuid
 from collections import defaultdict
-from notifications import async_notify
+from server.notifications import async_notify
 
 
 class Server:
