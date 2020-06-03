@@ -6,4 +6,5 @@
         <item>Połączenia</item>
     </string-array>
     <string name="settings">Ustawienia</string>
+    <string name="search_hint">Wyszukaj użytkowników</string>
 </resources>

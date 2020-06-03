@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">DeepNoise</string>
-    <string name="callee" translatable="false">com.lanecki.deepnoise.extra.CALLEE</string>
     <string-array name="tab_names">
         <item>Contacts</item>
         <item>Recent</item>
@@ -9,5 +8,7 @@
     <string name="settings_login" translatable="false">nick_key</string>
     <string name="settings_password" translatable="false">password_key</string>
     <string name="settings_server_address" translatable="false">server_address_key</string>
+
+    <string name="search_hint">Search users</string>
 
 </resources>
