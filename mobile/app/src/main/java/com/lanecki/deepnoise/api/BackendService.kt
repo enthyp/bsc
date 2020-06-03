@@ -2,12 +2,12 @@ package com.lanecki.deepnoise.api
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.preference.PreferenceManager
 import androidx.work.*
 import com.lanecki.deepnoise.R
 import com.lanecki.deepnoise.utils.InjectionUtils
 import com.lanecki.deepnoise.workers.FMSTokenUpdateWorker
+import com.lanecki.deepnoise.workers.LoginWorker
 import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -23,21 +23,33 @@ class BackendService(
     private val responseHandler: ResponseHandler
 ) {
 
-    suspend fun login(context: Context) {
+    fun scheduleLogin(context: Context) {
+        val loginRequest = OneTimeWorkRequestBuilder<LoginWorker>()
+            .setBackoffCriteria(
+                BackoffPolicy.LINEAR,
+                OneTimeWorkRequest.MIN_BACKOFF_MILLIS,
+                TimeUnit.MILLISECONDS)
+            .build()
+        WorkManager.getInstance(context).enqueue(loginRequest)
+    }
+
+    suspend fun login(context: Context): Resource<Unit> {
         val sharedPreferences: SharedPreferences =
             PreferenceManager.getDefaultSharedPreferences(context)
 
-        // TODO: keep in database (security?)
+        // TODO: use Google Sign-in (token-based auth, this is unsafe)
+        // NOTE: SyncAdapter interface
         val nickKey = context.resources.getString(R.string.settings_login)
         val passwordKey = context.resources.getString(R.string.settings_password)
 
         val nick = sharedPreferences.getString(nickKey, "") ?: ""
         val password = sharedPreferences.getString(passwordKey, "") ?: ""
 
-        try {
+        return try {
             val response = backendClient.login(Credentials(nick, password))
+            responseHandler.handleSuccess(response)
         } catch (e: Exception) {
-            Log.d(TAG,"Fucked with ${e}")
+            responseHandler.handleException(e)
         }
     }
 

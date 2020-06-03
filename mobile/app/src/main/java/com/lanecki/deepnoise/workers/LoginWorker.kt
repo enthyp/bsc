@@ -1,7 +1,6 @@
 package com.lanecki.deepnoise.workers
 
 import android.content.Context
-import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.lanecki.deepnoise.api.BackendService
@@ -9,25 +8,18 @@ import com.lanecki.deepnoise.api.Status
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class FMSTokenUpdateWorker(
+class LoginWorker(
     private val appContext: Context,
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val token = inputData.getString("token")
+        val backendService = BackendService.getInstance()
+        val response = backendService.login(appContext)
 
-        if (token != null) {
-            val backendService = BackendService.getInstance()
-            val response = backendService.updateToken(token)
-
-            when (response.status) {
-                Status.SUCCESS -> Result.success()
-                else -> Result.failure()
-            }
-        } else {
-            Log.d(TAG, "Token required.")
-            Result.failure()
+        when (response.status) {
+            Status.SUCCESS -> Result.success()
+            else -> Result.failure()
         }
     }
 

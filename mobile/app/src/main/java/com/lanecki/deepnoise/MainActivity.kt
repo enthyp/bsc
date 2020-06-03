@@ -59,6 +59,9 @@ class MainActivity : AppCompatActivity() {
         }.attach()
 
         setSupportActionBar(binding.mainToolbar)
+
+        val backendService = BackendService.getInstance()
+        backendService.scheduleLogin(this)
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
