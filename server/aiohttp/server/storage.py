@@ -1,4 +1,5 @@
 import aiopg.sa as aiosa
+import re
 import sqlalchemy as sa
 
 meta = sa.MetaData()
@@ -54,6 +55,18 @@ class DBStorage:
         async with self.db.acquire() as conn:
             i_query = users.update().where(users.c.login == login).values(token=token)
             await conn.execute(i_query)
+
+    async def find_users(self, query):
+        # Escape wildcards
+        # TODO: maybe allow exact match only?
+        q = re.sub(r'[%_]', '\\\1', query)
+        wildcard_q = '%' + q + '%'
+
+        async with self.db.acquire() as conn:
+            s_query = sa.select([users.c.login]).where(users.c.login.like(wildcard_q))
+            res = await conn.execute(s_query)
+
+            return await res.fetchall()
 
 
 async def get_engine(config):

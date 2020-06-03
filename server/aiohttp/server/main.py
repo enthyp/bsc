@@ -11,7 +11,7 @@ from aiohttp_security import (
 
 from server.auth import check_credentials, setup_auth
 from server.notifications import setup_notifications
-from server.serving import ClientEndpoint, setup_server
+from server.call import ClientEndpoint, setup_server
 from server.storage import setup_db
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
@@ -86,6 +86,21 @@ async def handle_login(request):
         raise response
     else:
         raise web.HTTPUnauthorized()
+
+
+@routes.get('/users/search')
+async def handle_login(request):
+    await check_authorized(request)
+    login = await authorized_userid(request)
+
+    params = request.rel_url.query
+    logging.info("SEARCH: {} from {}".format(params['query'], login))
+
+    storage = request.app['storage']
+    users = await storage.find_users(params['query'])
+
+    data = [{'login': user[0]} for user in users]
+    return web.json_response(data)
 
 
 @routes.post('/logout')
