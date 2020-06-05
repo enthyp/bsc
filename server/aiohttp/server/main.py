@@ -10,7 +10,7 @@ from aiohttp_security import (
 )
 
 from server.auth import check_credentials, setup_auth
-from server.notifications import push_invitation, setup_notifications
+from server.notifications import *
 from server.call import ClientEndpoint, setup_server
 from server.storage import setup_db
 
@@ -130,6 +130,31 @@ async def handle_invitation(request):
     await push_invitation(token, login)
 
     await storage.add_invitation(login, user['login'])
+
+    return web.Response()
+
+
+@routes.post('/invitations/answer')
+async def handle_invitation_answer(request):
+    await check_authorized(request)
+    login = await authorized_userid(request)
+
+    answer = await request.json()
+    accepted = answer['positive']
+    recipient = answer['to']
+    logging.info(f"WOOHOO! {answer}")
+    logging.info("ANSWER INVITATION: {} to {}: {}".format(login, recipient['login'], accepted))
+
+    storage = request.app['storage']
+
+    # NOTE: could change status only (invitation history)
+    await storage.remove_invitation(recipient['login'], login)
+
+    # if accepted:
+    #     await storage.add_friendship(recipient['login'], login)
+
+    token = await storage.get_token(recipient['login'])
+    await push_invitation_answer(token, login, str(accepted))
 
     return web.Response()
 

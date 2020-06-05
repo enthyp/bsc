@@ -162,6 +162,25 @@ class DBStorage:
                 .values(from_user=from_id, to_user=to_id)
             await conn.execute(i_query)
 
+    async def remove_invitation(self, login, invited):
+        async with self.db.acquire() as conn:
+            aliased = users.alias()
+            joined = users\
+                .join(invitations, users.c.id == invitations.c.from_user)\
+                .join(aliased, invitations.c.to_user == aliased.c.id)
+
+            s_query = sa.select([invitations.c.id])\
+                .where(
+                    sa.and_(
+                        users.c.login.in_([login, invited]),
+                        aliased.c.login.in_([login, invited])
+                    )
+                )\
+                .select_from(joined)
+
+            d_query = invitations.delete().where(invitations.c.id.in_(s_query))
+            await conn.execute(d_query)
+
 
 async def get_engine(config):
     return await aiosa.create_engine(config.get('DATABASE', 'URL'))

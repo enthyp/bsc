@@ -7,6 +7,9 @@ import androidx.lifecycle.liveData
 import androidx.preference.PreferenceManager
 import androidx.work.*
 import com.lanecki.deepnoise.R
+import com.lanecki.deepnoise.api.model.Credentials
+import com.lanecki.deepnoise.api.model.InvitationAnswer
+import com.lanecki.deepnoise.api.model.Token
 import com.lanecki.deepnoise.model.User
 import com.lanecki.deepnoise.utils.InjectionUtils
 import com.lanecki.deepnoise.workers.UpdateFCMTokenWorker
@@ -39,23 +42,16 @@ class BackendService(
         val password = sharedPreferences.getString(passwordKey, "") ?: ""
 
         return try {
-            val response = backendClient.login(Credentials(nick, password))
+            val response = backendClient.login(
+                Credentials(
+                    nick,
+                    password
+                )
+            )
             responseHandler.handleSuccess(response)
         } catch (e: Exception) {
             responseHandler.handleException(e)
         }
-    }
-
-    fun scheduleUpdateToken(context: Context, token: String) {
-        val inputData = workDataOf("token" to token)
-        val updateTokenRequest = OneTimeWorkRequestBuilder<UpdateFCMTokenWorker>()
-            .setInputData(inputData)
-            .setBackoffCriteria(
-                BackoffPolicy.LINEAR,
-                OneTimeWorkRequest.MIN_BACKOFF_MILLIS,
-                TimeUnit.MILLISECONDS)
-            .build()
-        WorkManager.getInstance(context).enqueue(updateTokenRequest)
     }
 
     suspend fun updateToken(token: Token): Resource<Unit> {
@@ -82,6 +78,15 @@ class BackendService(
             } catch (e: Exception) {
                 emit(responseHandler.handleException(e))
             }
+        }
+    }
+
+    suspend fun answerInvitation(to: User, positive: Boolean): Resource<Unit> {
+        return try {
+            val response = backendClient.answerInvitation(InvitationAnswer(to, positive))
+            return responseHandler.handleSuccess(response)
+        } catch (e: Exception) {
+            responseHandler.handleException(e)
         }
     }
 
