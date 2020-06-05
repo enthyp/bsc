@@ -3,17 +3,14 @@ package com.lanecki.deepnoise.api
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.liveData
 import androidx.preference.PreferenceManager
 import androidx.work.*
 import com.lanecki.deepnoise.R
 import com.lanecki.deepnoise.model.User
 import com.lanecki.deepnoise.utils.InjectionUtils
-import com.lanecki.deepnoise.workers.FMSTokenUpdateWorker
-import com.lanecki.deepnoise.workers.LoginWorker
+import com.lanecki.deepnoise.workers.UpdateFCMTokenWorker
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -28,16 +25,6 @@ class BackendService(
     private val backendClient: BackendApi,
     private val responseHandler: ResponseHandler
 ) {
-
-    fun scheduleLogin(context: Context) {
-        val loginRequest = OneTimeWorkRequestBuilder<LoginWorker>()
-            .setBackoffCriteria(
-                BackoffPolicy.LINEAR,
-                OneTimeWorkRequest.MIN_BACKOFF_MILLIS,
-                TimeUnit.MILLISECONDS)
-            .build()
-        WorkManager.getInstance(context).enqueue(loginRequest)
-    }
 
     suspend fun login(context: Context): Resource<Unit> {
         val sharedPreferences: SharedPreferences =
@@ -61,7 +48,7 @@ class BackendService(
 
     fun scheduleUpdateToken(context: Context, token: String) {
         val inputData = workDataOf("token" to token)
-        val updateTokenRequest = OneTimeWorkRequestBuilder<FMSTokenUpdateWorker>()
+        val updateTokenRequest = OneTimeWorkRequestBuilder<UpdateFCMTokenWorker>()
             .setInputData(inputData)
             .setBackoffCriteria(
                 BackoffPolicy.LINEAR,
@@ -71,7 +58,7 @@ class BackendService(
         WorkManager.getInstance(context).enqueue(updateTokenRequest)
     }
 
-    suspend fun updateToken(token: String): Resource<Unit> {
+    suspend fun updateToken(token: Token): Resource<Unit> {
         return try {
             val response = backendClient.updateToken(token)
             return responseHandler.handleSuccess(response)

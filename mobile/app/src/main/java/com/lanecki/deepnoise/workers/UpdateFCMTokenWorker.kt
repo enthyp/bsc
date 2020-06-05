@@ -6,10 +6,11 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.lanecki.deepnoise.api.BackendService
 import com.lanecki.deepnoise.api.Status
+import com.lanecki.deepnoise.api.Token
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class FMSTokenUpdateWorker(
+class UpdateFCMTokenWorker(
     private val appContext: Context,
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
@@ -19,7 +20,7 @@ class FMSTokenUpdateWorker(
 
         if (token != null) {
             val backendService = BackendService.getInstance()
-            val response = backendService.updateToken(token)
+            val response = backendService.updateToken(Token(token))
 
             when (response.status) {
                 Status.SUCCESS -> Result.success()
@@ -32,6 +33,6 @@ class FMSTokenUpdateWorker(
     }
 
     companion object {
-        private const val TAG = "FMSTokenUpdateWorker"
+        private const val TAG = "UpdateFCMTokenWorker"
     }
 }

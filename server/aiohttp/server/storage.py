@@ -11,11 +11,39 @@ users = sa.Table(
     sa.Column('token', sa.String(4096), nullable=False),
 )
 
+invitations = sa.Table(
+    'invitations', meta,
+    sa.Column('id', sa.Integer, primary_key=True),
+    sa.Column('from_user', sa.Integer, sa.ForeignKey('users.id')),
+    sa.Column('to_user', sa.Integer, sa.ForeignKey('users.id')),
+    sa.UniqueConstraint('from_user', 'to_user')
+)
+
+friendships = sa.Table(
+    'friendships', meta,
+    sa.Column('id', sa.Integer, primary_key=True),
+    sa.Column('from_user', sa.Integer, sa.ForeignKey('users.id')),
+    sa.Column('to_user', sa.Integer, sa.ForeignKey('users.id')),
+    sa.UniqueConstraint('from_user', 'to_user')
+)
+
 create_user_table = ('CREATE TABLE IF NOT EXISTS users('
                      'id SERIAL PRIMARY KEY, '
                      'login VARCHAR (100) UNIQUE NOT NULL, '
                      'password VARCHAR (100) NOT NULL, '
                      'token VARCHAR (4096));')
+
+create_invitation_table = ('CREATE TABLE IF NOT EXISTS invitations('
+                           'id SERIAL PRIMARY KEY, '
+                           'from_user INTEGER REFERENCES users(id), '
+                           'to_user INTEGER REFERENCES users(id), '
+                           'UNIQUE (from_user, to_user));')
+
+create_friendship_table = ('CREATE TABLE IF NOT EXISTS friendships('
+                           'id SERIAL PRIMARY KEY, '
+                           'from_user INTEGER REFERENCES users(id), '
+                           'to_user INTEGER REFERENCES users(id), '
+                           'UNIQUE (from_user, to_user));')
 
 
 class DBStorage:
@@ -71,13 +99,13 @@ class DBStorage:
 
             return await res.fetchall()
 
-    # TODO
     async def get_token(self, login):
         async with self.db.acquire() as conn:
-            s_query = sa.select([users.c.login, users.c.token])
+            s_query = sa.select([users.c.token]).where(users.c.login == login)
             res = await conn.execute(s_query)
 
-            return await res.fetchall()
+            token = await res.fetchone()
+            return token[0]
 
     async def add_token(self, login, token):
         async with self.db.acquire() as conn:
@@ -127,6 +155,8 @@ def setup_db(app, config):
         # Create tables.
         async with engine.acquire() as conn:
             await conn.execute(create_user_table)
+            await conn.execute(create_friendship_table)
+            await conn.execute(create_invitation_table)
 
     app.on_startup.append(_setup)
     app.on_cleanup.append(cleanup_storage)

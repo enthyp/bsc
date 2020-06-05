@@ -11,7 +11,7 @@ interface BackendApi {
     suspend fun login(@Body credentials: Credentials)
 
     @POST("token")
-    suspend fun updateToken(@Body token: String)
+    suspend fun updateToken(@Body token: Token)
 
     @GET("users/search")
     suspend fun getUsers(@Query("query") query: String): List<User>

@@ -6,15 +6,17 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
-import android.view.View
 import android.widget.SearchView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.viewpager2.widget.ViewPager2
+import androidx.work.*
 import com.lanecki.deepnoise.databinding.ActivityMainBinding
 import com.lanecki.deepnoise.adapters.MainPagerAdapter
 import com.google.android.material.tabs.TabLayoutMediator
-import com.lanecki.deepnoise.api.BackendService
 import com.lanecki.deepnoise.settings.SettingsActivity
+import com.lanecki.deepnoise.workers.UpdateFCMTokenWorker
+import com.lanecki.deepnoise.workers.GetFCMTokenWorker
+import com.lanecki.deepnoise.workers.LoginWorker
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
 
@@ -34,8 +36,32 @@ class MainActivity : AppCompatActivity() {
 
         setSupportActionBar(binding.mainToolbar)
 
-        val backendService = BackendService.getInstance()
-        backendService.scheduleLogin(this)
+        connect()
+    }
+
+    private fun connect() {
+        // Login and update FCM token
+        val loginRequest = OneTimeWorkRequestBuilder<LoginWorker>()
+            .setBackoffCriteria(
+                BackoffPolicy.LINEAR,
+                OneTimeWorkRequest.MIN_BACKOFF_MILLIS,
+                TimeUnit.MILLISECONDS)
+            .build()
+
+        val getTokenRequest = OneTimeWorkRequestBuilder<GetFCMTokenWorker>().build()
+
+        val updateTokenRequest = OneTimeWorkRequestBuilder<UpdateFCMTokenWorker>()
+            .setBackoffCriteria(
+                BackoffPolicy.LINEAR,
+                OneTimeWorkRequest.MIN_BACKOFF_MILLIS,
+                TimeUnit.MILLISECONDS)
+            .build()
+
+        WorkManager.getInstance(this)
+            .beginWith(loginRequest)
+            .then(getTokenRequest)
+            .then(updateTokenRequest)
+            .enqueue()
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {

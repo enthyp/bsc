@@ -63,9 +63,10 @@ async def token_handler(request):
     await check_authorized(request)
     login = await authorized_userid(request)
 
-    token = await request.text()
-    logging.info(f'TOKEN: {token}')
-    await request.app['server'].on_token(login, token)
+    body = await request.json()
+    logging.info(body['token'])
+    # TODO: DB only?
+    await request.app['server'].on_token(login, body['token'])
 
     return web.Response()
 
@@ -117,10 +118,9 @@ async def handle_invitation(request):
     if not await storage.registered(user['login']):
         return web.HTTPBadRequest()
 
-    if user['login'] == login:
-        return web.HTTPBadRequest()
-    return web.Response()
-
+    # if user['login'] == login:
+    #     return web.HTTPBadRequest()
+    #
     # if user['login'] in await storage.get_friends(login):
     #     return web.HTTPBadRequest()
     #
@@ -128,11 +128,12 @@ async def handle_invitation(request):
     #     return web.HTTPBadRequest()
     #
     # await storage.add_invitation(login, user['login'])
-    #
-    # token = await storage.get_token(user['login'])
-    # await push_invitation(token, login)
-    #
-    # return web.Response()
+
+    token = await storage.get_token(user['login'])
+    logging.info(token)
+    await push_invitation(token, login)
+
+    return web.Response()
 
 
 @routes.post('/logout')

@@ -33,7 +33,7 @@ class SearchActivity : AppCompatActivity() {
                 when (it.status) {
                     Status.SUCCESS -> Toast.makeText(this, "Invited!", Toast.LENGTH_LONG).show()
 
-                    // TODO: why?
+                    // TODO: why failed?
                     else -> Toast.makeText(this, "Failed!", Toast.LENGTH_LONG).show()
                 }
             })

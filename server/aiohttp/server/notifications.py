@@ -22,9 +22,9 @@ async def push_incoming_call(token, caller, call_id):
     await notify(token, payload)
 
 
-# TODO
 async def push_invitation(token, from_whom):
-    pass
+    payload = {'type': 'INVITATION', 'from_user': from_whom}
+    await notify(token, payload)
 
 
 def setup_notifications(config):
