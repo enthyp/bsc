@@ -12,6 +12,7 @@ import androidx.work.*
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.lanecki.deepnoise.call.CallState
+import com.lanecki.deepnoise.receivers.InvitationReceiver
 import com.lanecki.deepnoise.workers.UpdateFCMTokenWorker
 import java.util.concurrent.TimeUnit
 
@@ -58,6 +59,7 @@ class FMService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        // TODO: constants
         val channelId = "default"
         val notification =
             NotificationCompat.Builder(this, channelId)
@@ -75,11 +77,25 @@ class FMService : FirebaseMessagingService() {
 
     private fun notifyFriendsInvitation(data: MutableMap<String, String>) {
         val from = data["from_user"]
+        // TODO: will do for now
+        val notificationId = SystemClock.uptimeMillis().toInt()
 
-        // TODO: use BroadcastReceiver to handle click (Accept/Refuse) actions
-        val intent = Intent()
-        val pendingIntent: PendingIntent = PendingIntent.getActivity(this, 0, intent, 0)
+        val acceptIntent = Intent(this, InvitationReceiver::class.java).apply {
+            action = Constant.ACTION_ACCEPT_INVITATION
+            putExtra(Constant.EXTRA_WHO_INVITES, from)
+            putExtra(Constant.EXTRA_NOTIFICATION_ID, notificationId)
+        }
 
+        val refuseIntent = Intent(this, InvitationReceiver::class.java).apply {
+            action = Constant.ACTION_REFUSE_INVITATION
+            putExtra(Constant.EXTRA_WHO_INVITES, from)
+            putExtra(Constant.EXTRA_NOTIFICATION_ID, notificationId)
+        }
+
+        val acceptPendingIntent: PendingIntent = PendingIntent.getBroadcast(this, notificationId, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+        val refusePendingIntent: PendingIntent = PendingIntent.getBroadcast(this, notificationId, refuseIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+
+        // TODO: constants
         val channelId = "default"
         val builder =
             NotificationCompat.Builder(this, channelId)
@@ -88,13 +104,13 @@ class FMService : FirebaseMessagingService() {
                 .setContentTitle("You received a friends request!")
                 .setContentText("From: $from")
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setContentIntent(pendingIntent)
+                .addAction(0, getString(R.string.invitation_accept), acceptPendingIntent)
+                .addAction(0, getString(R.string.invitation_refuse), refusePendingIntent)
                 .setAutoCancel(true)
 
-        // TODO: will do for now
-        val oneTimeID = SystemClock.uptimeMillis()
+
         with(NotificationManagerCompat.from(this)) {
-            notify("FRIENDS_INVITATION", oneTimeID.toInt(), builder.build())
+            notify(Constant.NOTIFICATION_TAG_INVITATION, notificationId, builder.build())
         }
 
     }

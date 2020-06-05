@@ -7,4 +7,6 @@
     </string-array>
     <string name="settings">Ustawienia</string>
     <string name="search_hint">Wyszukaj użytkowników</string>
+    <string name="invitation_accept">Akceptuj</string>
+    <string name="invitation_refuse">Odrzuć</string>
 </resources>

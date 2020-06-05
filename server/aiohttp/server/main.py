@@ -126,10 +126,10 @@ async def handle_invitation(request):
     if user['login'] in await storage.get_invitations(login):
         return web.HTTPBadRequest()
 
-    await storage.add_invitation(login, user['login'])
-
     token = await storage.get_token(user['login'])
     await push_invitation(token, login)
+
+    await storage.add_invitation(login, user['login'])
 
     return web.Response()
 

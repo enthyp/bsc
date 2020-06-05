@@ -17,6 +17,8 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <receiver android:name=".receivers.InvitationReceiver"  android:exported="true" />
+
         <activity
             android:name=".MainActivity"
             android:label="@string/app_name"
