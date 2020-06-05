@@ -92,6 +92,11 @@ class DBStorage:
     # TOKENS
     ###
 
+    async def add_token(self, login, token):
+        async with self.db.acquire() as conn:
+            i_query = users.update().where(users.c.login == login).values(token=token)
+            await conn.execute(i_query)
+
     async def get_tokens(self):
         async with self.db.acquire() as conn:
             s_query = sa.select([users.c.login, users.c.token])
@@ -107,35 +112,54 @@ class DBStorage:
             token = await res.fetchone()
             return token[0]
 
-    async def add_token(self, login, token):
-        async with self.db.acquire() as conn:
-            i_query = users.update().where(users.c.login == login).values(token=token)
-            await conn.execute(i_query)
-
     ###
     # FRIENDS
     ###
 
-    # TODO
     async def get_friends(self, login):
         async with self.db.acquire() as conn:
-            s_query = sa.select([users.c.login, users.c.token])
-            res = await conn.execute(s_query)
+            aliased = users.alias()
+            joined = users\
+                .join(friendships, users.c.id == friendships.c.from_user)\
+                .join(aliased, friendships.c.to_user == aliased.c.id)
 
+            s_query = sa.select([aliased.c.login]).where(users.c.login == login)\
+                .select_from(joined)
+
+            res = await conn.execute(s_query)
             return await res.fetchall()
 
-    # TODO
     async def get_invitations(self, login):
         async with self.db.acquire() as conn:
-            s_query = sa.select([users.c.login, users.c.token])
-            res = await conn.execute(s_query)
+            aliased = users.alias()
+            joined = users\
+                .join(invitations, users.c.id == invitations.c.from_user)\
+                .join(aliased, invitations.c.to_user == aliased.c.id)
 
+            s_query = sa.select([aliased.c.login]).where(users.c.login == login)\
+                .select_from(joined)
+
+            res = await conn.execute(s_query)
             return await res.fetchall()
 
-    # TODO
     async def add_invitation(self, login, invited):
         async with self.db.acquire() as conn:
-            i_query = users.update().where(users.c.login == login).values(token=invited)
+            s_query = sa\
+                .select([users.c.id, users.c.login])\
+                .where(users.c.login.in_((login, invited)))
+
+            res = await conn.execute(s_query)
+            parties = await res.fetchall()
+
+            if parties[0]['login'] == login:
+                from_id = parties[0]['id']
+                to_id = parties[1]['id']
+            else:
+                from_id = parties[1]['id']
+                to_id = parties[0]['id']
+
+            i_query = invitations.insert()\
+                .values(from_user=from_id, to_user=to_id)
             await conn.execute(i_query)
 
 

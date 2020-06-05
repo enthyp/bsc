@@ -64,7 +64,6 @@ async def token_handler(request):
     login = await authorized_userid(request)
 
     body = await request.json()
-    logging.info(body['token'])
     # TODO: DB only?
     await request.app['server'].on_token(login, body['token'])
 
@@ -118,19 +117,18 @@ async def handle_invitation(request):
     if not await storage.registered(user['login']):
         return web.HTTPBadRequest()
 
-    # if user['login'] == login:
-    #     return web.HTTPBadRequest()
-    #
-    # if user['login'] in await storage.get_friends(login):
-    #     return web.HTTPBadRequest()
-    #
-    # if user['login'] in await storage.get_invitations(login):
-    #     return web.HTTPBadRequest()
-    #
-    # await storage.add_invitation(login, user['login'])
+    if user['login'] == login:
+        return web.HTTPBadRequest()
+
+    if user['login'] in await storage.get_friends(login):
+        return web.HTTPBadRequest()
+
+    if user['login'] in await storage.get_invitations(login):
+        return web.HTTPBadRequest()
+
+    await storage.add_invitation(login, user['login'])
 
     token = await storage.get_token(user['login'])
-    logging.info(token)
     await push_invitation(token, login)
 
     return web.Response()
