@@ -129,6 +129,24 @@ class DBStorage:
             res = await conn.execute(s_query)
             return await res.fetchall()
 
+    async def add_friendship(self, login, invited):
+        async with self.db.acquire() as conn:
+            s_query = sa\
+                .select([users.c.id, users.c.login])\
+                .where(users.c.login.in_((login, invited)))
+
+            res = await conn.execute(s_query)
+            parties = await res.fetchall()
+
+            ids = [p['id'] for p in parties]
+            values = [
+                {'from_user': ids[0], 'to_user': ids[1]},
+                {'from_user': ids[1], 'to_user': ids[0]}
+            ]
+            i_query = friendships.insert().values(values)
+
+            await conn.execute(i_query)
+
     async def get_invitations(self, login):
         async with self.db.acquire() as conn:
             aliased = users.alias()
@@ -151,15 +169,13 @@ class DBStorage:
             res = await conn.execute(s_query)
             parties = await res.fetchall()
 
-            if parties[0]['login'] == login:
-                from_id = parties[0]['id']
-                to_id = parties[1]['id']
-            else:
-                from_id = parties[1]['id']
-                to_id = parties[0]['id']
+            ids = [p['id'] for p in parties]
+            values = [
+                {'from_user': ids[0], 'to_user': ids[1]},
+                {'from_user': ids[1], 'to_user': ids[0]}
+            ]
+            i_query = invitations.insert().values(values)
 
-            i_query = invitations.insert()\
-                .values(from_user=from_id, to_user=to_id)
             await conn.execute(i_query)
 
     async def remove_invitation(self, login, invited):

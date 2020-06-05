@@ -22,6 +22,7 @@ class FMService : FirebaseMessagingService() {
             when (remoteMessage.data["type"]) {
                 "INCOMING" -> notifyIncomingCall(remoteMessage.data)
                 "INVITATION" -> notifyFriendsInvitation(remoteMessage.data)
+                "INVITATION_ANSWER" -> notifyFriendsInvitationAnswer(remoteMessage.data)
                 else -> Log.d(TAG, "Unknown message type: $this")
             }
         }
@@ -101,8 +102,8 @@ class FMService : FirebaseMessagingService() {
             NotificationCompat.Builder(this, channelId)
                 .setDefaults(Notification.DEFAULT_ALL)
                 .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle("You received a friends request!")
-                .setContentText("From: $from")
+                .setContentTitle("Friends request")
+                .setContentText("User $from wants to be friends")
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .addAction(0, getString(R.string.invitation_accept), acceptPendingIntent)
                 .addAction(0, getString(R.string.invitation_refuse), refusePendingIntent)
@@ -112,7 +113,35 @@ class FMService : FirebaseMessagingService() {
         with(NotificationManagerCompat.from(this)) {
             notify(Constant.NOTIFICATION_TAG_INVITATION, notificationId, builder.build())
         }
+    }
 
+    private fun notifyFriendsInvitationAnswer(data: MutableMap<String, String>) {
+        val from = data["from_user"]
+        val positive = data["positive"] == "True"
+
+        // TODO: constants
+        val contentMsg = "User $from " + (if (positive) "accepted" else "rejected") + " your invitation!"
+
+        // TODO: will do for now
+        val notificationId = SystemClock.uptimeMillis().toInt()
+
+        val intent = Intent()
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(this, notificationId, intent, 0)
+
+        val channelId = "default"
+        val builder =
+            NotificationCompat.Builder(this, channelId)
+                .setDefaults(Notification.DEFAULT_ALL)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("Friends response")
+                .setContentText(contentMsg)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+
+        with(NotificationManagerCompat.from(this)) {
+            notify(Constant.NOTIFICATION_TAG_INVITATION, notificationId, builder.build())
+        }
     }
 
     companion object {

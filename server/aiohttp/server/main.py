@@ -142,7 +142,6 @@ async def handle_invitation_answer(request):
     answer = await request.json()
     accepted = answer['positive']
     recipient = answer['to']
-    logging.info(f"WOOHOO! {answer}")
     logging.info("ANSWER INVITATION: {} to {}: {}".format(login, recipient['login'], accepted))
 
     storage = request.app['storage']
@@ -150,8 +149,8 @@ async def handle_invitation_answer(request):
     # NOTE: could change status only (invitation history)
     await storage.remove_invitation(recipient['login'], login)
 
-    # if accepted:
-    #     await storage.add_friendship(recipient['login'], login)
+    if accepted:
+        await storage.add_friendship(recipient['login'], login)
 
     token = await storage.get_token(recipient['login'])
     await push_invitation_answer(token, login, str(accepted))
