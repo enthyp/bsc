@@ -15,4 +15,7 @@ interface BackendApi {
 
     @GET("users/search")
     suspend fun getUsers(@Query("query") query: String): List<User>
+
+    @POST("users/invite")
+    suspend fun inviteUser(@Body user: User)
 }

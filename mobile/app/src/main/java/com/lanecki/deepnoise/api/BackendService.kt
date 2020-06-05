@@ -3,6 +3,7 @@ package com.lanecki.deepnoise.api
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.liveData
 import androidx.preference.PreferenceManager
 import androidx.work.*
@@ -12,6 +13,7 @@ import com.lanecki.deepnoise.utils.InjectionUtils
 import com.lanecki.deepnoise.workers.FMSTokenUpdateWorker
 import com.lanecki.deepnoise.workers.LoginWorker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -82,6 +84,17 @@ class BackendService(
         return liveData(Dispatchers.IO) {
             val users = backendClient.getUsers(query)
             emit(users)
+        }
+    }
+
+    fun invite(user: User): LiveData<Resource<Unit>> {
+        return liveData(Dispatchers.IO) {
+            try {
+                val response = backendClient.inviteUser(user)
+                emit(responseHandler.handleSuccess(response))
+            } catch (e: Exception) {
+                emit(responseHandler.handleException(e))
+            }
         }
     }
 

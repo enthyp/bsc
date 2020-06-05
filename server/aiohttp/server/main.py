@@ -10,7 +10,7 @@ from aiohttp_security import (
 )
 
 from server.auth import check_credentials, setup_auth
-from server.notifications import setup_notifications
+from server.notifications import push_invitation, setup_notifications
 from server.call import ClientEndpoint, setup_server
 from server.storage import setup_db
 
@@ -32,7 +32,7 @@ async def websocket_handler(request):
     try:
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
-                msg_str = msg.json()
+                msg_str = await msg.json()
                 msg_obj = json.loads(msg_str)
                 msg_type = msg_obj['type']
                 payload = json.loads(msg_obj['payload'])
@@ -89,18 +89,50 @@ async def handle_login(request):
 
 
 @routes.get('/users/search')
-async def handle_login(request):
+async def handle_search(request):
     await check_authorized(request)
     login = await authorized_userid(request)
 
-    params = request.rel_url.query
-    logging.info("SEARCH: {} from {}".format(params['query'], login))
+    query = request.rel_url.query['query']
+    logging.info("SEARCH: {} from {}".format(query, login))
 
     storage = request.app['storage']
-    users = await storage.find_users(params['query'])
+    users = await storage.find_users(query)
 
     data = [{'login': user[0]} for user in users]
     return web.json_response(data)
+
+
+@routes.post('/users/invite')
+async def handle_invitation(request):
+    await check_authorized(request)
+    login = await authorized_userid(request)
+
+    user = await request.json()
+    logging.info("INVITE: {} invites {}".format(login, user['login']))
+
+    storage = request.app['storage']
+
+    # TODO: fewer DB calls? locking?
+    if not await storage.registered(user['login']):
+        return web.HTTPBadRequest()
+
+    if user['login'] == login:
+        return web.HTTPBadRequest()
+    return web.Response()
+
+    # if user['login'] in await storage.get_friends(login):
+    #     return web.HTTPBadRequest()
+    #
+    # if user['login'] in await storage.get_invitations(login):
+    #     return web.HTTPBadRequest()
+    #
+    # await storage.add_invitation(login, user['login'])
+    #
+    # token = await storage.get_token(user['login'])
+    # await push_invitation(token, login)
+    #
+    # return web.Response()
 
 
 @routes.post('/logout')

@@ -1,13 +1,9 @@
 package com.lanecki.deepnoise.viewmodels
 
-import android.util.Log
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.switchMap
+import androidx.lifecycle.*
 import com.lanecki.deepnoise.api.BackendService
+import com.lanecki.deepnoise.api.Resource
 import com.lanecki.deepnoise.model.User
-import java.util.*
 
 class SearchResultsViewModel : ViewModel() {
 
@@ -25,5 +21,9 @@ class SearchResultsViewModel : ViewModel() {
     val users: LiveData<List<User>> = query.switchMap { query ->
         val response = backendService.getUsers(query)
         response
+    }
+
+    fun sendInvitation(user: User): LiveData<Resource<Unit>> {
+        return backendService.invite(user)
     }
 }

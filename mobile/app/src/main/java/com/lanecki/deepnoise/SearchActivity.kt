@@ -4,10 +4,13 @@ import android.app.SearchManager
 import android.content.Intent
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.lanecki.deepnoise.adapters.SearchResultsAdapter
+import com.lanecki.deepnoise.api.BackendService
+import com.lanecki.deepnoise.api.Status
 import com.lanecki.deepnoise.databinding.ActivitySearchBinding
 import com.lanecki.deepnoise.utils.InjectionUtils
 import com.lanecki.deepnoise.viewmodels.SearchResultsViewModel
@@ -24,7 +27,17 @@ class SearchActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         val viewManager = LinearLayoutManager(this)
-        val viewAdapter = SearchResultsAdapter()
+        val viewAdapter = SearchResultsAdapter { user ->
+            val response = viewModel.sendInvitation(user)
+            response.observe(this, Observer {
+                when (it.status) {
+                    Status.SUCCESS -> Toast.makeText(this, "Invited!", Toast.LENGTH_LONG).show()
+
+                    // TODO: why?
+                    else -> Toast.makeText(this, "Failed!", Toast.LENGTH_LONG).show()
+                }
+            })
+        }
 
         binding.resultsList.apply {
             layoutManager = viewManager

@@ -26,6 +26,10 @@ class DBStorage:
         self.db.close()
         await self.db.wait_closed()
 
+    ###
+    # USERS
+    ###
+
     async def registered(self, login):
         async with self.db.acquire() as conn:
             s_query = users.count().where(users.c.login == login)
@@ -44,18 +48,6 @@ class DBStorage:
                     return user['password']
             return None
 
-    async def get_tokens(self):
-        async with self.db.acquire() as conn:
-            s_query = sa.select([users.c.login, users.c.token])
-            res = await conn.execute(s_query)
-
-            return await res.fetchall()
-
-    async def insert_token(self, login, token):
-        async with self.db.acquire() as conn:
-            i_query = users.update().where(users.c.login == login).values(token=token)
-            await conn.execute(i_query)
-
     async def find_users(self, query):
         # Escape wildcards
         # TODO: maybe allow exact match only?
@@ -67,6 +59,56 @@ class DBStorage:
             res = await conn.execute(s_query)
 
             return await res.fetchall()
+
+    ###
+    # TOKENS
+    ###
+
+    async def get_tokens(self):
+        async with self.db.acquire() as conn:
+            s_query = sa.select([users.c.login, users.c.token])
+            res = await conn.execute(s_query)
+
+            return await res.fetchall()
+
+    # TODO
+    async def get_token(self, login):
+        async with self.db.acquire() as conn:
+            s_query = sa.select([users.c.login, users.c.token])
+            res = await conn.execute(s_query)
+
+            return await res.fetchall()
+
+    async def add_token(self, login, token):
+        async with self.db.acquire() as conn:
+            i_query = users.update().where(users.c.login == login).values(token=token)
+            await conn.execute(i_query)
+
+    ###
+    # FRIENDS
+    ###
+
+    # TODO
+    async def get_friends(self, login):
+        async with self.db.acquire() as conn:
+            s_query = sa.select([users.c.login, users.c.token])
+            res = await conn.execute(s_query)
+
+            return await res.fetchall()
+
+    # TODO
+    async def get_invitations(self, login):
+        async with self.db.acquire() as conn:
+            s_query = sa.select([users.c.login, users.c.token])
+            res = await conn.execute(s_query)
+
+            return await res.fetchall()
+
+    # TODO
+    async def add_invitation(self, login, invited):
+        async with self.db.acquire() as conn:
+            i_query = users.update().where(users.c.login == login).values(token=invited)
+            await conn.execute(i_query)
 
 
 async def get_engine(config):

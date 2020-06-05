@@ -2,28 +2,28 @@ package com.lanecki.deepnoise.adapters
 
 import android.content.Context
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
+import com.lanecki.deepnoise.api.BackendService
 import com.lanecki.deepnoise.databinding.ListItemSearchedUserBinding
 import com.lanecki.deepnoise.model.User
 
 
-class SearchResultsAdapter : RecyclerView.Adapter<SearchResultsAdapter.UserViewHolder>() {
+class SearchResultsAdapter(private val onClick: (User) -> Unit) :
+    RecyclerView.Adapter<SearchResultsAdapter.UserViewHolder>() {
 
     class UserViewHolder(
         private val binding: ListItemSearchedUserBinding,
         private val context: Context
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        init {
+        fun bind(user: User, onClick: (User) -> Unit) {
             binding.root.setOnClickListener {
-                Toast.makeText(context, binding.userLogin.text, Toast.LENGTH_LONG).show()
+                onClick(user)
             }
-        }
-
-        fun bind(user: User) {
             binding.apply {
                 userLogin.text = user.login
             }
@@ -68,6 +68,6 @@ class SearchResultsAdapter : RecyclerView.Adapter<SearchResultsAdapter.UserViewH
 
     override fun onBindViewHolder(holder: UserViewHolder, position: Int) {
         val user = results[position]
-        holder.bind(user)
+        holder.bind(user, onClick)
     }
 }

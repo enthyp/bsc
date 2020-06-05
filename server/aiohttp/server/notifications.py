@@ -4,7 +4,7 @@ import firebase_admin
 from firebase_admin import credentials, messaging
 
 
-async def async_notify(token, payload):
+async def notify(token, payload):
     message = messaging.Message(
         data=payload,
         token=token
@@ -17,12 +17,14 @@ async def async_notify(token, payload):
     logging.info('Notified!')
 
 
-def notify(token, payload):
-    message = messaging.Message(
-        data=payload,
-        token=token
-    )
-    messaging.send(message)
+async def push_incoming_call(token, caller, call_id):
+    payload = {'type': 'INCOMING', 'caller': caller, 'call_id': call_id}
+    await notify(token, payload)
+
+
+# TODO
+async def push_invitation(token, from_whom):
+    pass
 
 
 def setup_notifications(config):

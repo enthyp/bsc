@@ -2,7 +2,7 @@ import json
 import logging
 import uuid
 from collections import defaultdict
-from server.notifications import async_notify
+from server.notifications import push_incoming_call
 
 
 class Server:
@@ -47,7 +47,7 @@ class Server:
 
     async def on_token(self, identity, token):
         self.tokens[identity] = token  # TODO: DB
-        await self.storage.insert_token(identity, token)
+        await self.storage.add_token(identity, token)
         logging.info(f'Token saved for user {identity}')
 
     async def initiate_call(self, caller, callee):
@@ -57,7 +57,7 @@ class Server:
             conversation = Conversation(call_id)
             self.calls[call_id] = conversation
 
-            await async_notify(token, {'type': ClientEndpoint.INCOMING, 'caller': caller, 'call_id': call_id})
+            await push_incoming_call(token, caller, call_id)
             return conversation
 
     async def end_call(self, call_id):
@@ -111,7 +111,6 @@ class ClientEndpoint:
     HANGUP = 'HANGUP'
 
     # Messages to the client
-    INCOMING = 'INCOMING'  # Firebase only!
     ACCEPTED = 'ACCEPTED'
     REFUSED = 'REFUSED'
     CANCELLED = 'CANCELLED'
