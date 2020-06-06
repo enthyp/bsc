@@ -4,11 +4,12 @@ import androidx.lifecycle.*
 import com.lanecki.deepnoise.api.BackendService
 import com.lanecki.deepnoise.api.Resource
 import com.lanecki.deepnoise.model.User
+import com.lanecki.deepnoise.utils.InjectionUtils
 
 class SearchResultsViewModel : ViewModel() {
 
     // TODO: use InjectionUtils
-    private val backendService: BackendService by lazy { BackendService.getInstance() }
+    private val backendService: BackendService by lazy { InjectionUtils.provideBackendService() }
 
     private val query: MutableLiveData<String> by lazy {
         MutableLiveData<String>()
@@ -20,7 +21,7 @@ class SearchResultsViewModel : ViewModel() {
     }
 
     val users: LiveData<List<User>> = query.switchMap { query ->
-        val response = backendService.getUsers(query)
+        val response = backendService.findUsers(query)
         response
     }
 

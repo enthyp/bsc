@@ -10,6 +10,7 @@ import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.lanecki.deepnoise.adapters.ContactsAdapter
 import com.lanecki.deepnoise.databinding.FragmentContactsBinding
+import com.lanecki.deepnoise.model.User
 import com.lanecki.deepnoise.utils.InjectionUtils
 import com.lanecki.deepnoise.viewmodels.ContactsViewModel
 
@@ -27,6 +28,13 @@ class ContactsFragment : Fragment() {
 
         val viewManager = LinearLayoutManager(this.context)
         val viewAdapter = ContactsAdapter()
+
+        binding.swipeRefresh.setOnRefreshListener {
+            contactsViewModel.refreshContacts()
+            contactsViewModel.isFresh.observe(viewLifecycleOwner, Observer { fresh ->
+                binding.swipeRefresh.isRefreshing = !fresh
+            })
+        }
 
         contactsViewModel.getContacts().observe(viewLifecycleOwner, Observer { contacts ->
             viewAdapter.updateContacts(contacts)

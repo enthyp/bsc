@@ -88,6 +88,20 @@ async def handle_login(request):
         raise web.HTTPUnauthorized()
 
 
+@routes.get('/users/friends')
+async def handle_get_friends(request):
+    await check_authorized(request)
+    login = await authorized_userid(request)
+
+    logging.info("GET FRIENDS FOR: {} from {}".format(login, login))
+
+    storage = request.app['storage']
+    users = await storage.get_friends(login)
+
+    data = [{'login': user[0]} for user in users]
+    return web.json_response(data)
+
+
 @routes.get('/users/search')
 async def handle_search(request):
     await check_authorized(request)

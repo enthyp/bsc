@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import com.lanecki.deepnoise.api.BackendService
 import com.lanecki.deepnoise.api.Status
 import com.lanecki.deepnoise.api.model.Token
+import com.lanecki.deepnoise.utils.InjectionUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -19,7 +20,7 @@ class UpdateFCMTokenWorker(
         val token = inputData.getString("token")
 
         if (token != null) {
-            val backendService = BackendService.getInstance()
+            val backendService = InjectionUtils.provideBackendService()
             val response = backendService.updateToken(
                 Token(
                     token

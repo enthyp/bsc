@@ -16,6 +16,9 @@ interface BackendApi {
     @POST("token")
     suspend fun updateToken(@Body token: Token)
 
+    @GET("users/friends")
+    suspend fun getFriendsForSelf(): List<User>
+
     @GET("users/search")
     suspend fun getUsers(@Query("query") query: String): List<User>
 

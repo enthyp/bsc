@@ -63,10 +63,19 @@ class BackendService(
         }
     }
 
-    fun getUsers(query: String): LiveData<List<User>> {
+    fun findUsers(query: String): LiveData<List<User>> {
         return liveData(Dispatchers.IO) {
             val users = backendClient.getUsers(query)
             emit(users)
+        }
+    }
+
+    suspend fun getFriendsForSelf(): Resource<List<User>> {
+        return try {
+            val response = backendClient.getFriendsForSelf()
+            return responseHandler.handleSuccess(response)
+        } catch (e: Exception) {
+            responseHandler.handleException(e)
         }
     }
 

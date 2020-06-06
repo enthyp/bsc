@@ -7,6 +7,7 @@ import com.lanecki.deepnoise.api.BackendService
 import com.lanecki.deepnoise.api.Status
 import com.lanecki.deepnoise.db.AppDatabase
 import com.lanecki.deepnoise.model.User
+import com.lanecki.deepnoise.utils.InjectionUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -22,7 +23,7 @@ class AnswerInvitationWorker(
         if (to == null) return@withContext Result.failure()
 
         val user = User(0, to)
-        val backendService = BackendService.getInstance()
+        val backendService = InjectionUtils.provideBackendService()
         val response = backendService.answerInvitation(user, positive)
 
         when (response.status) {

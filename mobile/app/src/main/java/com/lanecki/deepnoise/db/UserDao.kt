@@ -12,6 +12,12 @@ interface UserDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(user: User)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(users: List<User>)
+
     @Query("SELECT * FROM users")
     fun getAll(): LiveData<List<User>>
+
+    @Query("DELETE FROM users")
+    suspend fun deleteAll()
 }
