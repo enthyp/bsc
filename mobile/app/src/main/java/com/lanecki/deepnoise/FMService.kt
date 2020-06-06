@@ -12,7 +12,10 @@ import androidx.work.*
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.lanecki.deepnoise.call.CallState
+import com.lanecki.deepnoise.db.AppDatabase
 import com.lanecki.deepnoise.receivers.InvitationReceiver
+import com.lanecki.deepnoise.utils.Constants
+import com.lanecki.deepnoise.workers.AddFriendWorker
 import com.lanecki.deepnoise.workers.UpdateFCMTokenWorker
 import java.util.concurrent.TimeUnit
 
@@ -51,9 +54,9 @@ class FMService : FirebaseMessagingService() {
 
         // TODO: give the user some choice. Also, it's no good on the tablet...
         val intent = Intent(this, CallActivity::class.java).apply {
-            putExtra(Constant.CALLEE_KEY, caller)
-            putExtra(Constant.CALL_ID_KEY, callId)
-            putExtra(Constant.INITIAL_STATE_KEY, CallState.INCOMING)
+            putExtra(Constants.CALLEE_KEY, caller)
+            putExtra(Constants.CALL_ID_KEY, callId)
+            putExtra(Constants.INITIAL_STATE_KEY, CallState.INCOMING)
         }
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,
@@ -82,15 +85,15 @@ class FMService : FirebaseMessagingService() {
         val notificationId = SystemClock.uptimeMillis().toInt()
 
         val acceptIntent = Intent(this, InvitationReceiver::class.java).apply {
-            action = Constant.ACTION_ACCEPT_INVITATION
-            putExtra(Constant.EXTRA_WHO_INVITES, from)
-            putExtra(Constant.EXTRA_NOTIFICATION_ID, notificationId)
+            action = Constants.ACTION_ACCEPT_INVITATION
+            putExtra(Constants.EXTRA_WHO_INVITES, from)
+            putExtra(Constants.EXTRA_NOTIFICATION_ID, notificationId)
         }
 
         val refuseIntent = Intent(this, InvitationReceiver::class.java).apply {
-            action = Constant.ACTION_REFUSE_INVITATION
-            putExtra(Constant.EXTRA_WHO_INVITES, from)
-            putExtra(Constant.EXTRA_NOTIFICATION_ID, notificationId)
+            action = Constants.ACTION_REFUSE_INVITATION
+            putExtra(Constants.EXTRA_WHO_INVITES, from)
+            putExtra(Constants.EXTRA_NOTIFICATION_ID, notificationId)
         }
 
         val acceptPendingIntent: PendingIntent = PendingIntent.getBroadcast(this, notificationId, acceptIntent, PendingIntent.FLAG_UPDATE_CURRENT)
@@ -111,13 +114,21 @@ class FMService : FirebaseMessagingService() {
 
 
         with(NotificationManagerCompat.from(this)) {
-            notify(Constant.NOTIFICATION_TAG_INVITATION, notificationId, builder.build())
+            notify(Constants.NOTIFICATION_TAG_INVITATION, notificationId, builder.build())
         }
     }
 
     private fun notifyFriendsInvitationAnswer(data: MutableMap<String, String>) {
         val from = data["from_user"]
         val positive = data["positive"] == "True"
+
+        if (positive) {
+            val inputData = workDataOf("login" to from)
+            val addFriendRequest = OneTimeWorkRequestBuilder<AddFriendWorker>()
+                .setInputData(inputData)
+                .build()
+            WorkManager.getInstance(this).enqueue(addFriendRequest)
+        }
 
         // TODO: constants
         val contentMsg = "User $from " + (if (positive) "accepted" else "rejected") + " your invitation!"
@@ -140,7 +151,7 @@ class FMService : FirebaseMessagingService() {
                 .setAutoCancel(true)
 
         with(NotificationManagerCompat.from(this)) {
-            notify(Constant.NOTIFICATION_TAG_INVITATION, notificationId, builder.build())
+            notify(Constants.NOTIFICATION_TAG_INVITATION, notificationId, builder.build())
         }
     }
 

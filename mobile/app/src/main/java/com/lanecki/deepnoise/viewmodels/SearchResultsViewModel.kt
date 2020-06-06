@@ -7,6 +7,7 @@ import com.lanecki.deepnoise.model.User
 
 class SearchResultsViewModel : ViewModel() {
 
+    // TODO: use InjectionUtils
     private val backendService: BackendService by lazy { BackendService.getInstance() }
 
     private val query: MutableLiveData<String> by lazy {

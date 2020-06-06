@@ -21,6 +21,7 @@ import androidx.preference.PreferenceManager
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.lanecki.deepnoise.call.*
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
+import com.lanecki.deepnoise.utils.Constants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -61,9 +62,9 @@ class CallActivity : AppCompatActivity(), CallUI,
         nick = sharedPreferences.getString(nickKey, "") ?: ""
         val serverAddress = sharedPreferences.getString(serverAddressKey, "") ?: ""
 
-        state = intent.getSerializableExtra(Constant.INITIAL_STATE_KEY) as CallState
-        callee = intent.getSerializableExtra(Constant.CALLEE_KEY) as String
-        callId = intent.getSerializableExtra(Constant.CALL_ID_KEY) as String?
+        state = intent.getSerializableExtra(Constants.INITIAL_STATE_KEY) as CallState
+        callee = intent.getSerializableExtra(Constants.CALLEE_KEY) as String
+        callId = intent.getSerializableExtra(Constants.CALL_ID_KEY) as String?
 
         callManager = CallManager(nick, serverAddress, this, application)
 
