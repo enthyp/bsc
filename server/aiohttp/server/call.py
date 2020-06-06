@@ -2,15 +2,21 @@ import json
 import logging
 import uuid
 from collections import defaultdict
-from notifications import async_notify
+from server.notifications import push_incoming_call
 
 
 class Server:
-    def __init__(self):
+    def __init__(self, storage):
         self.clients = {}
-        self.tokens = {}  # TODO: DB
+        self.tokens = {}
+        self.storage = storage
         self.calls = {}
         self.cancelled = defaultdict(set)
+
+    async def setup(self):
+        user_tokens = await self.storage.get_tokens()
+        for entry in user_tokens:
+            self.tokens[entry[0]] = entry[1]
 
     def add_client(self, client):
         if client.nick not in self.clients:
@@ -39,9 +45,10 @@ class Server:
         # TODO: handle error
         return self.calls.get(call_id, None)
 
-    def on_token(self, identity, token):
+    async def on_token(self, identity, token):
         self.tokens[identity] = token  # TODO: DB
-        logging.info(f'Token received for user {identity}')
+        await self.storage.add_token(identity, token)
+        logging.info(f'Token saved for user {identity}')
 
     async def initiate_call(self, caller, callee):
         token = self.tokens.get(callee, None)
@@ -50,7 +57,7 @@ class Server:
             conversation = Conversation(call_id)
             self.calls[call_id] = conversation
 
-            await async_notify(token, {'type': ClientEndpoint.INCOMING, 'caller': caller, 'call_id': call_id})
+            await push_incoming_call(token, caller, call_id)
             return conversation
 
     async def end_call(self, call_id):
@@ -104,7 +111,6 @@ class ClientEndpoint:
     HANGUP = 'HANGUP'
 
     # Messages to the client
-    INCOMING = 'INCOMING'  # Firebase only!
     ACCEPTED = 'ACCEPTED'
     REFUSED = 'REFUSED'
     CANCELLED = 'CANCELLED'
@@ -212,7 +218,7 @@ class ClientEndpoint:
         uid = self.conversation.uid
 
         if self.conversation.empty:
-            self.server.end_call(uid)
+            await self.server.end_call(uid)
         elif len(self.conversation) == 1:
             await self.conversation.signal(
                 self,
@@ -234,6 +240,8 @@ class ClientEndpoint:
 
     async def offer(self, msg):
         await self.conversation.signal(self, ClientEndpoint.OFFER, msg)
+        from pprint import pprint
+        pprint(msg)
         logging.info(f'Offer published by {self.nick}: {msg}')
 
     async def answer(self, msg):
@@ -268,3 +276,12 @@ class ClientEndpoint:
         payload_json = json.dumps(payload)
         ws_msg = json.dumps({'type': type, 'payload': payload_json})
         await self.socket.send_json(ws_msg)
+
+
+def setup_server(app):
+    async def _setup(app):
+        server = Server(app['storage'])
+        await server.setup()
+        app['server'] = server
+
+    app.on_startup.append(_setup)

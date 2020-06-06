@@ -14,9 +14,9 @@ open class ResponseHandler {
 
     fun <T : Any> handleException(e: Exception): Resource<T> {
         return when (e) {
-            is HttpException -> Resource.error(getErrorMessage(e.code()), null)
-            is SocketTimeoutException -> Resource.error(getErrorMessage(ErrorCodes.SocketTimeOut.code), null)
-            else -> Resource.error(getErrorMessage(Int.MAX_VALUE), null)
+            is HttpException -> Resource.error(getErrorMessage(e.code()), e.code(), null)
+            is SocketTimeoutException -> Resource.error(getErrorMessage(ErrorCodes.SocketTimeOut.code), null, null)
+            else -> Resource.error(getErrorMessage(Int.MAX_VALUE), null, null)
         }
     }
 

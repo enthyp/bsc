@@ -6,37 +6,38 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.lanecki.deepnoise.api.BackendService
 import com.lanecki.deepnoise.api.Status
-import com.lanecki.deepnoise.api.Token
+import com.lanecki.deepnoise.api.model.Token
+import com.lanecki.deepnoise.utils.InjectionUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class FMSTokenUpdateWorker(
-    appContext: Context,
-    workerParams: WorkerParameters)
-    : CoroutineWorker(appContext, workerParams) {
+class UpdateFCMTokenWorker(
+    private val appContext: Context,
+    workerParams: WorkerParameters
+) : CoroutineWorker(appContext, workerParams) {
 
-    // TODO: return Result.retry() on error?
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val identity = inputData.getString("identity")
         val token = inputData.getString("token")
 
-        if (identity != null && token != null) {
-            val backendService = BackendService.getInstance()
-            val response = backendService.scheduleTokenUpdate(Token(identity, token))
+        if (token != null) {
+            val backendService = InjectionUtils.provideBackendService()
+            val response = backendService.updateToken(
+                Token(
+                    token
+                )
+            )
 
-            Log.d(TAG, response.message.toString())
             when (response.status) {
                 Status.SUCCESS -> Result.success()
                 else -> Result.failure()
             }
-        }
-        else {
-            Log.d(TAG, "Both identity and token required.")
+        } else {
+            Log.d(TAG, "Token required.")
             Result.failure()
         }
     }
 
     companion object {
-        private const val TAG = "FMSTokenUpdateWorker"
+        private const val TAG = "UpdateFCMTokenWorker"
     }
 }

@@ -2,36 +2,59 @@ package com.lanecki.deepnoise.api
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.liveData
 import androidx.preference.PreferenceManager
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
+import androidx.work.*
 import com.lanecki.deepnoise.R
+import com.lanecki.deepnoise.api.model.Credentials
+import com.lanecki.deepnoise.api.model.InvitationAnswer
+import com.lanecki.deepnoise.api.model.Token
+import com.lanecki.deepnoise.model.User
 import com.lanecki.deepnoise.utils.InjectionUtils
-import com.lanecki.deepnoise.workers.FMSTokenUpdateWorker
+import com.lanecki.deepnoise.workers.UpdateFCMTokenWorker
+import kotlinx.coroutines.Dispatchers
+import okhttp3.JavaNetCookieJar
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.net.CookieHandler
+import java.net.CookieManager
+import java.util.concurrent.TimeUnit
+
 
 class BackendService(
     private val backendClient: BackendApi,
     private val responseHandler: ResponseHandler
 ) {
 
-    fun scheduleTokenUpdate(context: Context, token: String) {
+    suspend fun login(context: Context): Resource<Unit> {
         val sharedPreferences: SharedPreferences =
             PreferenceManager.getDefaultSharedPreferences(context)
 
-        val nickKey = context.resources.getString(R.string.settings_nick)
-        val nick = sharedPreferences.getString(nickKey, "") ?: ""
+        // TODO: use Google Sign-in (token-based auth, this is unsafe)
+        // NOTE: SyncAdapter interface
+        val nickKey = context.resources.getString(R.string.settings_login)
+        val passwordKey = context.resources.getString(R.string.settings_password)
 
-        val inputData = workDataOf("identity" to nick, "token" to token)
-        val updateTokenRequest = OneTimeWorkRequestBuilder<FMSTokenUpdateWorker>()
-            .setInputData(inputData)
-            .build()
-        WorkManager.getInstance(context).enqueue(updateTokenRequest)
+        val nick = sharedPreferences.getString(nickKey, "") ?: ""
+        val password = sharedPreferences.getString(passwordKey, "") ?: ""
+
+        return try {
+            val response = backendClient.login(
+                Credentials(
+                    nick,
+                    password
+                )
+            )
+            responseHandler.handleSuccess(response)
+        } catch (e: Exception) {
+            responseHandler.handleException(e)
+        }
     }
 
-    suspend fun scheduleTokenUpdate(token: Token): Resource<Unit> {
+    suspend fun updateToken(token: Token): Resource<Unit> {
         return try {
             val response = backendClient.updateToken(token)
             return responseHandler.handleSuccess(response)
@@ -40,9 +63,47 @@ class BackendService(
         }
     }
 
+    fun findUsers(query: String): LiveData<List<User>> {
+        return liveData(Dispatchers.IO) {
+            val users = backendClient.getUsers(query)
+            emit(users)
+        }
+    }
+
+    suspend fun getFriendsForSelf(): Resource<List<User>> {
+        return try {
+            val response = backendClient.getFriendsForSelf()
+            return responseHandler.handleSuccess(response)
+        } catch (e: Exception) {
+            responseHandler.handleException(e)
+        }
+    }
+
+    fun invite(user: User): LiveData<Resource<Unit>> {
+        return liveData(Dispatchers.IO) {
+            try {
+                val response = backendClient.inviteUser(user)
+                emit(responseHandler.handleSuccess(response))
+            } catch (e: Exception) {
+                emit(responseHandler.handleException(e))
+            }
+        }
+    }
+
+    suspend fun answerInvitation(to: User, positive: Boolean): Resource<Unit> {
+        return try {
+            val response = backendClient.answerInvitation(InvitationAnswer(to, positive))
+            return responseHandler.handleSuccess(response)
+        } catch (e: Exception) {
+            responseHandler.handleException(e)
+        }
+    }
+
     companion object {
+        private const val TAG = "BackendService";
         private const val URL = "192.168.100.106:5000"
-        @Volatile private var backendServiceInstance: BackendService? = null
+        @Volatile
+        private var backendServiceInstance: BackendService? = null
 
         fun getInstance(): BackendService {
             return backendServiceInstance ?: synchronized(this) {
@@ -53,8 +114,20 @@ class BackendService(
         }
 
         private fun buildBackendService(): BackendService {
+            val interceptor = HttpLoggingInterceptor()
+            interceptor.setLevel(HttpLoggingInterceptor.Level.BODY)
+            val cookieHandler: CookieHandler = CookieManager()
+
+            val httpClient = OkHttpClient.Builder().addNetworkInterceptor(interceptor)
+                .cookieJar(JavaNetCookieJar(cookieHandler))
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .writeTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build()
+
             val apiClient = Retrofit.Builder()
                 .baseUrl("http://${URL}/")
+                .client(httpClient)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(BackendApi::class.java)

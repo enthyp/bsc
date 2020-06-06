@@ -1,4 +1,5 @@
 #!/bin/bash
+# Applied to all speakers to have .wav instead of .flac files
 
 SPEAKER_DIR=$1
 OUTPUT_DIR=$2
@@ -11,4 +12,5 @@ for d in `ls $SPEAKER_DIR`; do
         FILENAME=${f##*/}; 
         sox $f $OUTPUT_DIR/${FILENAME//.flac/.wav}; 
     done
+    yes | rm -r $SPEAKER_DIR/$d
 done
