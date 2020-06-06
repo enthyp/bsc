@@ -37,7 +37,7 @@ class WSClient(
 
     companion object {
         private const val TAG = "WSClient"
-        private const val SERVER_ADDRESS = "ws://192.168.100.106:5000"  // TODO: in Settings panel only
+        private const val SERVER_ADDRESS = "http://192.168.100.106:5000"  // TODO: in Settings panel only
     }
 
     private val backoffStrategy = ExponentialWithJitterBackoffStrategy(5000, 5000)

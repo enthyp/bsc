@@ -32,7 +32,7 @@ async def websocket_handler(request):
     try:
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
-                msg_str = await msg.json()
+                msg_str = msg.json()
                 msg_obj = json.loads(msg_str)
                 msg_type = msg_obj['type']
                 payload = json.loads(msg_obj['payload'])
