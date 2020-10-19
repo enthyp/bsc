@@ -93,7 +93,7 @@ async def handle_get_friends(request):
     await check_authorized(request)
     login = await authorized_userid(request)
 
-    logging.info("GET FRIENDS FOR: {} from {}".format(login, login))
+    logging.info("GET FRIENDS FOR: {}".format(login))
 
     storage = request.app['storage']
     users = await storage.get_friends(login)
@@ -168,6 +168,36 @@ async def handle_invitation_answer(request):
 
     token = await storage.get_token(recipient['login'])
     await push_invitation_answer(token, login, str(accepted))
+
+    return web.Response()
+
+
+@routes.get('/users/status')
+async def handle_status_request(request):
+    await check_authorized(request)
+
+    query = request.rel_url.query
+    login = query['login']
+    logging.info("STATUS REQUEST: for {}".format(login))
+
+    storage = request.app['storage']
+    status = await storage.get_status(login)
+
+    data = {'status': status.name}
+    return web.json_response(data)
+
+
+@routes.post('/users/status')
+async def handle_status_update(request):
+    await check_authorized(request)
+    login = await authorized_userid(request)
+    req = await request.json()
+
+    status = req['status']
+    logging.info("STATUS UPDATE: from {} status {}".format(login, status))
+
+    storage = request.app['storage']
+    await storage.set_status(login, status)
 
     return web.Response()
 

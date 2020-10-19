@@ -1,6 +1,8 @@
 import aiopg.sa as aiosa
+import enum
 import re
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert
 
 meta = sa.MetaData()
 users = sa.Table(
@@ -27,6 +29,29 @@ friendships = sa.Table(
     sa.UniqueConstraint('from_user', 'to_user')
 )
 
+
+class UserStatus(enum.Enum):
+    online = 0
+    offline = 1
+    busy = 2
+
+
+# aiopg is a pain to work with
+create_user_status_type = ("DO $$ BEGIN "
+                           "    CREATE TYPE userstatus AS ENUM('online', 'offline', 'busy'); "
+                           "EXCEPTION "
+                           "    WHEN duplicate_object THEN NULL; "
+                           "END $$;")
+
+
+statuses = sa.Table(
+    'statuses', meta,
+    sa.Column('id', sa.Integer, primary_key=True),
+    sa.Column('user_id', sa.Integer, sa.ForeignKey('users.id')),
+    sa.Column('status', sa.Enum(UserStatus)),
+    sa.UniqueConstraint('user_id')
+)
+
 create_user_table = ('CREATE TABLE IF NOT EXISTS users('
                      'id SERIAL PRIMARY KEY, '
                      'login VARCHAR (100) UNIQUE NOT NULL, '
@@ -44,6 +69,12 @@ create_friendship_table = ('CREATE TABLE IF NOT EXISTS friendships('
                            'from_user INTEGER REFERENCES users(id), '
                            'to_user INTEGER REFERENCES users(id), '
                            'UNIQUE (from_user, to_user));')
+
+create_status_table = ('CREATE TABLE IF NOT EXISTS statuses('
+                       'id SERIAL PRIMARY KEY, '
+                       'user_id INTEGER REFERENCES users(id), '
+                       'status userstatus NOT NULL, '
+                       'UNIQUE (user_id));')
 
 
 class DBStorage:
@@ -197,6 +228,41 @@ class DBStorage:
             d_query = invitations.delete().where(invitations.c.id.in_(s_query))
             await conn.execute(d_query)
 
+    ###
+    # USER STATUSES
+    ###
+    async def set_status(self, login, status):
+        async with self.db.acquire() as conn:
+            s_query = sa\
+                .select([users.c.id])\
+                .where(users.c.login == login)
+
+            res = await conn.execute(s_query)
+            user_id = (await res.fetchone())[0]
+
+            # TODO: error on "login not found"
+            i_query = insert(statuses).values({'user_id': user_id, 'status': status})\
+                .on_conflict_do_update(
+                constraint='statuses_user_id_key',
+                set_={'status': status},
+                where=(statuses.c.user_id == user_id)
+            )
+            await conn.execute(i_query)
+
+    async def get_status(self, login):
+        async with self.db.acquire() as conn:
+            s_query = sa\
+                .select([users.c.id])\
+                .where(users.c.login == login)
+
+            res = await conn.execute(s_query)
+            user_id = (await res.fetchone())[0]
+
+            # TODO: error on "login not found"
+            i_query = sa.select([statuses.c.status]).where(statuses.c.user_id == user_id)
+            res = await conn.execute(i_query)
+            return (await res.fetchone())[0]
+
 
 async def get_engine(config):
     return await aiosa.create_engine(config.get('DATABASE', 'URL'))
@@ -216,6 +282,8 @@ def setup_db(app, config):
             await conn.execute(create_user_table)
             await conn.execute(create_friendship_table)
             await conn.execute(create_invitation_table)
+            await conn.execute(create_user_status_type)
+            await conn.execute(create_status_table)
 
     app.on_startup.append(_setup)
     app.on_cleanup.append(cleanup_storage)
