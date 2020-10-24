@@ -4,7 +4,6 @@ import android.content.Context
 import com.lanecki.deepnoise.api.BackendService
 import com.lanecki.deepnoise.repositories.UserRepository
 import com.lanecki.deepnoise.api.ResponseHandler
-import com.lanecki.deepnoise.call.CallLifecycle
 import com.lanecki.deepnoise.db.AppDatabase
 import com.lanecki.deepnoise.viewmodels.ContactsViewModelFactory
 import com.lanecki.deepnoise.viewmodels.SearchResultsViewModelFactory
@@ -27,5 +26,5 @@ object InjectionUtils {
 
     fun provideSearchResultsViewModelFactory() = SearchResultsViewModelFactory()
     fun provideResponseHandler() = ResponseHandler()
-    fun provideCallLifecycle() = CallLifecycle()
+    fun provideCallLifecycle() = AuxLifecycle()
 }

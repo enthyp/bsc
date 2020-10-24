@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.*
-import com.lanecki.deepnoise.utils.Constants
+import com.lanecki.deepnoise.Constants
 import com.lanecki.deepnoise.workers.AnswerInvitationWorker
 import java.util.concurrent.TimeUnit
 

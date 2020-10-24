@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.lanecki.deepnoise.call.*
+import com.lanecki.deepnoise.channel.ChannelManager
 import com.lanecki.deepnoise.databinding.ActivityCallBinding
 import com.lanecki.deepnoise.utils.*
 import kotlinx.coroutines.CoroutineScope
@@ -27,12 +28,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 
+interface ChannelUI {
+    fun onConnectionClosed()
+    // TODO:
+    //  onTextMessage(message: String)
+    //  onUserJoined(user: String)
+    //  onUserLeft(user: String)
+}
+
+
 // TODO: use some Android config instead of hardcoding!
-class CallActivity : AppCompatActivity(), CallUI,
-    CoroutineScope by CoroutineScope(Dispatchers.Main) {
+class ChannelActivity : AppCompatActivity(), ChannelUI,
+    CoroutineScope by CoroutineScope(Dispatchers.Default) {
 
     companion object {
-        private const val TAG = "CallActivity"
+        private const val TAG = "ChannelActivity"
         private const val AUDIO_PERMISSION_REQUEST_CODE = 1
         private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
     }
@@ -45,7 +55,7 @@ class CallActivity : AppCompatActivity(), CallUI,
     private lateinit var callActionFab: FloatingActionButton
     private lateinit var hangupActionFab: FloatingActionButton
 
-    private lateinit var callManager: CallManager
+    private lateinit var channelManager: ChannelManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,7 +76,7 @@ class CallActivity : AppCompatActivity(), CallUI,
         callee = intent.getSerializableExtra(Constants.CALLEE_KEY) as String
         callId = intent.getSerializableExtra(Constants.CALL_ID_KEY) as String?
 
-        callManager = CallManager(nick, serverAddress, this, application)
+        channelManager = ChannelManager(nick, serverAddress, this, application)
 
         // Setup view
         hangupActionFab = binding.hangup
@@ -89,7 +99,7 @@ class CallActivity : AppCompatActivity(), CallUI,
         callActionFab.visibility = View.GONE
         if (state == CallState.INCOMING) {
             state = CallState.SIGNALLING
-            launch { callManager.send(
+            launch { channelManager.send(
                 AcceptMsg(
                     nick,
                     callee,
@@ -102,15 +112,15 @@ class CallActivity : AppCompatActivity(), CallUI,
     // TODO: fix the states (some callbacks to change it + mutex)
     private fun hangupActionFabClickListener() = View.OnClickListener {
         when (state) {
-            CallState.INCOMING -> launch { callManager.send(
+            CallState.INCOMING -> launch { channelManager.send(
                 RefuseMsg(
                     nick,
                     callee,
                     callId!!
                 )
             ) }
-            CallState.OUTGOING -> launch { callManager.send(HangupMsg) }
-            CallState.SIGNALLING -> launch { callManager.send(HangupMsg) }
+            CallState.OUTGOING -> launch { channelManager.send(HangupMsg) }
+            CallState.SIGNALLING -> launch { channelManager.send(HangupMsg) }
         }
 
         state = CallState.CLOSED
@@ -149,32 +159,13 @@ class CallActivity : AppCompatActivity(), CallUI,
     }
 
     override fun onDestroy() {
-        launch { callManager.send(CloseMsg) }
+        launch { channelManager.send(CloseMsg) }
         super.onDestroy()
         Log.d(TAG, "Destroyed!")
     }
 
-    override fun onModelLoadFailure() {
-        Toast.makeText(this, "Failed to load speech model!", Toast.LENGTH_LONG).show()
-    }
-
-    override fun onCallRefused() {
-        Toast.makeText(this, "Call refused!", Toast.LENGTH_LONG).show()
-        finish()
-    }
-
-    override fun onCallHungUp(callee: String) {
-        Toast.makeText(this, "Call hangup by $callee", Toast.LENGTH_LONG).show()
-        finish()
-    }
-
     override fun onConnectionClosed() {
         Toast.makeText(this, "Connection was closed...", Toast.LENGTH_LONG).show()
-        finish()
-    }
-
-    override fun onCallCancelled() {
-        Toast.makeText(this, "Call cancelled!", Toast.LENGTH_LONG).show()
         finish()
     }
 
@@ -207,16 +198,16 @@ class CallActivity : AppCompatActivity(), CallUI,
     }
 
     private fun onAudioPermissionGranted() {
-        launch { callManager.run() }
+        launch { channelManager.run() }
         if (state == CallState.INCOMING) {
-            launch { callManager.send(
+            launch { channelManager.send(
                 IncomingCallMsg(
                     callee,
                     callId!!
                 )
             ) }
         } else {
-            launch { callManager.send(
+            launch { channelManager.send(
                 OutgoingCallMsg(
                     callee
                 )
@@ -255,12 +246,4 @@ class CallActivity : AppCompatActivity(), CallUI,
     private fun onAudioPermissionDenied() {
         Toast.makeText(this, "Audio Permission Denied", Toast.LENGTH_LONG).show()
     }
-}
-
-interface CallUI {
-    fun onModelLoadFailure()
-    fun onCallRefused()
-    fun onCallCancelled()
-    fun onCallHungUp(callee: String)
-    fun onConnectionClosed()
 }

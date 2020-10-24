@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.lanecki.deepnoise.utils.Constants.DATABASE_NAME
+import com.lanecki.deepnoise.Constants.DATABASE_NAME
 import com.lanecki.deepnoise.model.User
 
 

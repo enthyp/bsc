@@ -1,9 +1,9 @@
-package com.lanecki.deepnoise.call
+package com.lanecki.deepnoise.utils
 
 import com.tinder.scarlet.Lifecycle
 import com.tinder.scarlet.lifecycle.LifecycleRegistry
 
-class CallLifecycle private constructor(private val lifecycleRegistry: LifecycleRegistry) :
+class AuxLifecycle private constructor(private val lifecycleRegistry: LifecycleRegistry) :
     Lifecycle by lifecycleRegistry {
 
     constructor() : this(LifecycleRegistry())

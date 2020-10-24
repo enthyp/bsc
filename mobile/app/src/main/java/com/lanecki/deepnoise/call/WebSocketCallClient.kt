@@ -1,8 +1,9 @@
-package com.lanecki.deepnoise.call.websocket
+package com.lanecki.deepnoise.call
 
 import android.util.Log
 import com.google.gson.Gson
-import com.lanecki.deepnoise.call.*
+import com.lanecki.deepnoise.api.WSApi
+import com.lanecki.deepnoise.utils.*
 import com.tinder.scarlet.Scarlet
 import com.tinder.scarlet.WebSocket
 import com.tinder.scarlet.messageadapter.gson.GsonMessageAdapter
@@ -17,7 +18,7 @@ import org.webrtc.SessionDescription
 import java.util.concurrent.TimeUnit
 
 
-enum class WSState {
+enum class CallWSState {
     INIT,
     CONNECTED,
     DISCONNECTED,
@@ -29,10 +30,10 @@ enum class WSState {
 }
 
 // TODO: handle exceptions (failed to connect, ...)
-class WSClient(
+class WebSocketCallClient(
     private val listener: Actor<Message>,
     private val serverAddress: String,
-    private val lifecycle: CallLifecycle
+    private val lifecycle: AuxLifecycle
 ) : Actor<Message>(Dispatchers.IO) {
 
     companion object {
@@ -53,7 +54,7 @@ class WSClient(
     private val wsEventChannel: ReceiveChannel<WebSocket.Event>
 
     private val initConnected = CompletableDeferred<Unit>()
-    private var state = WSState.INIT
+    private var state = CallWSState.INIT
 
     init {
         val address = if (serverAddress != "") serverAddress else SERVER_ADDRESS
@@ -113,8 +114,8 @@ class WSClient(
     }
 
     private suspend fun onWSOpened() {
-        if (state == WSState.INIT) {
-            state = WSState.CONNECTED
+        if (state == CallWSState.INIT) {
+            state = CallWSState.CONNECTED
             initConnected.complete(Unit)
         } else {
             send(ConnectedMsg)
@@ -153,31 +154,31 @@ class WSClient(
         Log.d(TAG, msg.type.toString())
 
         when (msg.type) {
-            MsgType.OFFER -> {
+            CallWSMessageType.OFFER -> {
                 val desc = gson.fromJson(msg.payload, SessionDescription::class.java)
                 send(OfferMsg(desc, false))
             }
-            MsgType.ANSWER -> {
+            CallWSMessageType.ANSWER -> {
                 val desc = gson.fromJson(msg.payload, SessionDescription::class.java)
                 send(AnswerMsg(desc, false))
             }
-            MsgType.ICE_CANDIDATE -> {
+            CallWSMessageType.ICE_CANDIDATE -> {
                 val ice = gson.fromJson(msg.payload, IceCandidate::class.java)
                 send(IceCandidateMsg(ice, false))
             }
-            MsgType.ACCEPTED -> {
+            CallWSMessageType.ACCEPTED -> {
                 val acc = gson.fromJson(msg.payload, AcceptedMsg::class.java)
                 send(acc)
             }
-            MsgType.REFUSED -> {
+            CallWSMessageType.REFUSED -> {
                 val ref = gson.fromJson(msg.payload, RefusedMsg::class.java)
                 send(ref)
             }
-            MsgType.CANCELLED -> {
+            CallWSMessageType.CANCELLED -> {
                 val can = gson.fromJson(msg.payload, CancelledMsg::class.java)
                 send(can)
             }
-            MsgType.HUNG_UP -> {
+            CallWSMessageType.HUNG_UP -> {
                 val hun = gson.fromJson(msg.payload, HungUpMsg::class.java)
                 send(hun)
             }
@@ -186,8 +187,8 @@ class WSClient(
     }
 
     private suspend fun handleConnected() = withContext(dispatcher) {
-        if (state == WSState.INIT) {
-            state = WSState.CONNECTED
+        if (state == CallWSState.INIT) {
+            state = CallWSState.CONNECTED
             launch { receiveServerMsg() }
         }
 
@@ -195,9 +196,12 @@ class WSClient(
     }
 
     private suspend fun handleLogin(msg: LoginMsg) = withContext(dispatcher) {
-        if (state == WSState.CONNECTED) {
-            state = WSState.LOGGED_IN
-            sendToServer(MsgType.LOGIN, Login(msg.nickname))
+        if (state == CallWSState.CONNECTED) {
+            state = CallWSState.LOGGED_IN
+            sendToServer(
+                CallWSMessageType.LOGIN,
+                Login(msg.nickname)
+            )
             msg.response.complete(Unit)
             // TODO: handle errors? will be replaced by some other authentication?
             // maybe ordinary HTTP sign-in can get us some token we could use here?
@@ -205,72 +209,92 @@ class WSClient(
     }
 
     private suspend fun handleCall(msg: CallMsg) = withContext(dispatcher) {
-        if (state == WSState.LOGGED_IN) {
-            state = WSState.RENDEZVOUS
-            sendToServer(MsgType.CALL, Call(msg.from, msg.to))
+        if (state == CallWSState.LOGGED_IN) {
+            state = CallWSState.RENDEZVOUS
+            sendToServer(
+                CallWSMessageType.CALL,
+                Call(
+                    msg.from,
+                    msg.to
+                )
+            )
         }
     }
 
     private suspend fun handleAccept(msg: AcceptMsg) = withContext(dispatcher) {
-        if (state == WSState.LOGGED_IN) {
-            state = WSState.SIGNALLING
-            sendToServer(MsgType.ACCEPT, Accept(msg.from, msg.to, msg.callId))
+        if (state == CallWSState.LOGGED_IN) {
+            state = CallWSState.SIGNALLING
+            sendToServer(
+                CallWSMessageType.ACCEPT,
+                Accept(
+                    msg.from,
+                    msg.to,
+                    msg.callId
+                )
+            )
         }
     }
 
     private suspend fun handleRefuse(msg: RefuseMsg) = withContext(dispatcher) {
-        if (state == WSState.LOGGED_IN) {
-            state = WSState.CLOSING
-            sendToServer(MsgType.REFUSE, Refuse(msg.from, msg.to, msg.callId))
+        if (state == CallWSState.LOGGED_IN) {
+            state = CallWSState.CLOSING
+            sendToServer(
+                CallWSMessageType.REFUSE,
+                Refuse(
+                    msg.from,
+                    msg.to,
+                    msg.callId
+                )
+            )
         }
     }
 
     private suspend fun handleCancel() = withContext(dispatcher) {
-        if (state == WSState.RENDEZVOUS) {
-            state = WSState.CLOSING
-            sendToServer(MsgType.CANCEL, Unit)
+        if (state == CallWSState.RENDEZVOUS) {
+            state = CallWSState.CLOSING
+            sendToServer(CallWSMessageType.CANCEL, Unit)
         }
     }
 
     private suspend fun handleCancelled(msg: CancelledMsg) = withContext(dispatcher) {
-        if (state == WSState.LOGGED_IN || state == WSState.SIGNALLING) {
-            state = WSState.CLOSING
+        if (state == CallWSState.LOGGED_IN || state == CallWSState.SIGNALLING) {
+            state = CallWSState.CLOSING
             listener.send(msg)
         }
     }
 
     private suspend fun handleHangup() = withContext(dispatcher) {
-        if (state == WSState.SIGNALLING) {
-            state = WSState.CLOSING
-            sendToServer(MsgType.HANGUP, Unit)
+        if (state == CallWSState.SIGNALLING) {
+            state = CallWSState.CLOSING
+            sendToServer(CallWSMessageType.HANGUP, Unit)
         }
     }
 
     private suspend fun handleHungUp(msg: HungUpMsg) = withContext(dispatcher) {
-        if (state == WSState.SIGNALLING) {
-            state = WSState.CLOSING
+        if (state == CallWSState.SIGNALLING) {
+            state = CallWSState.CLOSING
             listener.send(msg)
         }
     }
 
     private suspend fun handleAccepted(msg: AcceptedMsg) = withContext(dispatcher) {
-        if (state == WSState.RENDEZVOUS) {
-            state = WSState.SIGNALLING
+        if (state == CallWSState.RENDEZVOUS) {
+            state = CallWSState.SIGNALLING
             listener.send(msg)
         }
     }
 
     private suspend fun handleRefused(msg: RefusedMsg) = withContext(dispatcher) {
-        if (state == WSState.RENDEZVOUS) {
-            state = WSState.CLOSING
+        if (state == CallWSState.RENDEZVOUS) {
+            state = CallWSState.CLOSING
             listener.send(msg)
         }
     }
 
     private suspend fun handleOffer(msg: OfferMsg) = withContext(dispatcher) {
-        if (state == WSState.SIGNALLING) {
+        if (state == CallWSState.SIGNALLING) {
             if (msg.out) {
-                sendToServer(MsgType.OFFER, msg.sessionDescription)
+                sendToServer(CallWSMessageType.OFFER, msg.sessionDescription)
             }
             else {
                 listener.send(msg)
@@ -279,9 +303,9 @@ class WSClient(
     }
 
     private suspend fun handleAnswer(msg: AnswerMsg) = withContext(dispatcher) {
-        if (state == WSState.SIGNALLING) {
+        if (state == CallWSState.SIGNALLING) {
             if (msg.out) {
-                sendToServer(MsgType.ANSWER, msg.sessionDescription)
+                sendToServer(CallWSMessageType.ANSWER, msg.sessionDescription)
             }
             else {
                 listener.send(msg)
@@ -290,9 +314,9 @@ class WSClient(
     }
 
     private suspend fun handleIce(msg: IceCandidateMsg) = withContext(dispatcher) {
-        if (state == WSState.SIGNALLING) {
+        if (state == CallWSState.SIGNALLING) {
             if (msg.out) {
-                sendToServer(MsgType.ICE_CANDIDATE, msg.iceCandidate)
+                sendToServer(CallWSMessageType.ICE_CANDIDATE, msg.iceCandidate)
             }
             else {
                 listener.send(msg)
@@ -306,8 +330,8 @@ class WSClient(
     }
 
     private suspend fun handleClose() {
-        if (state == WSState.SIGNALLING || state == WSState.CLOSING) {
-            state = WSState.CLOSED
+        if (state == CallWSState.SIGNALLING || state == CallWSState.CLOSING) {
+            state = CallWSState.CLOSED
             lifecycle.stop()
             // TODO: a response to wait on?
         } else {
@@ -321,9 +345,12 @@ class WSClient(
         // TODO: what else??
     }
 
-    private suspend fun sendToServer(type: MsgType, data: Any?) = withContext(Dispatchers.IO) {
+    private suspend fun sendToServer(type: CallWSMessageType, data: Any?) = withContext(Dispatchers.IO) {
         val jsonData = gson.toJson(data)
-        val msg = ServerMessage(type, jsonData)
+        val msg = ServerMessage(
+            type,
+            jsonData
+        )
         val json = gson.toJson(msg)
         socket.sendSignal(json)
         Log.d(TAG, "Sent: $json")
@@ -332,7 +359,7 @@ class WSClient(
     }
 
     // Generic wrapper for other messages
-    data class ServerMessage(val type: MsgType, val payload: String)
+    data class ServerMessage(val type: CallWSMessageType, val payload: String)
 
     // Actual messages (payload)
     // TODO: do we need all these types??
@@ -342,7 +369,7 @@ class WSClient(
     data class Refuse(val from: String, val to: String, val call_id: String)
 }
 
-enum class MsgType {
+enum class CallWSMessageType {
     LOGIN,
     CALL,
     ACCEPT,

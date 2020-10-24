@@ -1,4 +1,4 @@
-package com.lanecki.deepnoise.utils
+package com.lanecki.deepnoise
 
 object Constants {
     const val CALLEE_KEY = "CALLEE"

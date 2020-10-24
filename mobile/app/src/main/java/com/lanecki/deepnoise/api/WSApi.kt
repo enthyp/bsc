@@ -1,4 +1,4 @@
-package com.lanecki.deepnoise.call.websocket
+package com.lanecki.deepnoise.api
 
 import com.tinder.scarlet.WebSocket
 import com.tinder.scarlet.ws.Receive

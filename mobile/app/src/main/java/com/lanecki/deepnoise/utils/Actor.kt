@@ -1,11 +1,10 @@
-package com.lanecki.deepnoise.call
+package com.lanecki.deepnoise.utils
 
 import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import org.webrtc.IceCandidate
 import org.webrtc.SessionDescription
-import java.lang.Exception
 
 // Poor man's actor until some new API takes off
 // TODO:

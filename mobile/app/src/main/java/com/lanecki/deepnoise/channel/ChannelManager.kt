@@ -1,20 +1,13 @@
-package com.lanecki.deepnoise.call
+package com.lanecki.deepnoise.channel
 
 import android.content.Context
 import android.util.Log
-import com.lanecki.deepnoise.CallUI
-import com.lanecki.deepnoise.channel.ChannelConnectionState
+import com.lanecki.deepnoise.ChannelUI
 import com.lanecki.deepnoise.utils.*
 import kotlinx.coroutines.*
-import org.tensorflow.lite.Interpreter
-import org.tensorflow.lite.support.common.FileUtil
-import org.webrtc.audio.JavaAudioDeviceModule
-import java.io.IOException
-import java.nio.ByteBuffer
-import java.nio.MappedByteBuffer
 
 
-enum class CallState {
+enum class ChannelConnectionState {
     INIT,
     INCOMING,
     OUTGOING,
@@ -22,43 +15,36 @@ enum class CallState {
     CLOSED
 }
 
-// TODO: some error on call to self? xd
-class CallManager(
+class ChannelManager(
     private val nickname: String,
     private val serverAddress: String,
-    private var ui: CallUI?,
+    private var ui: ChannelUI?,
     private val context: Context
 ) : Actor<Message>(Dispatchers.Default) {
 
     companion object {
-        private const val TAG = "CallManager"
+        private const val TAG = "ChannelManager"
     }
 
     private val lifecycle: AuxLifecycle = InjectionUtils.provideCallLifecycle()
-    private val wsClient: WebSocketCallClient
-    private lateinit var tfliteModel: MappedByteBuffer
-    private lateinit var tflite: Interpreter
-    private val peerConnectionManager: PeerConnectionManager
+    private val wsClient: WebSocketChannelClient
+    private val peerConnectionManager: MultiPeerConnectionManager
 
     private var state = ChannelConnectionState.INIT
 
     init {
         lifecycle.start()
-        wsClient = WebSocketCallClient(
+        wsClient = WebSocketChannelClient(
             this,
             serverAddress,
             lifecycle
         )
-
-        try {
-            tfliteModel = FileUtil.loadMappedFile(context, "identity_model.tflite")
-            tflite = Interpreter(tfliteModel)
-        } catch (e: IOException){
-            ui?.onModelLoadFailure()
-        }
-
-        val callback = audioCallback()
-        peerConnectionManager = PeerConnectionManager(this@CallManager, context, callback)
+        peerConnectionManager =
+            MultiPeerConnectionManager(
+                this@ChannelManager,
+                context,
+                null
+            )
     }
 
     // Implement WSListener interface.
@@ -108,7 +94,9 @@ class CallManager(
 
     private suspend fun handleHangup(msg: HangupMsg) = withContext(dispatcher) {
         when (state) {
-            ChannelConnectionState.OUTGOING -> { wsClient.send(CancelMsg); shutdown() }
+            ChannelConnectionState.OUTGOING -> { wsClient.send(
+                CancelMsg
+            ); shutdown() }
             ChannelConnectionState.SIGNALLING -> { wsClient.send(msg); shutdown() }
             else -> { /* TODO: ? */}
         }
@@ -131,7 +119,8 @@ class CallManager(
 
     private suspend fun handleAccept(msg: AcceptMsg) = withContext(dispatcher) {
         if (state == ChannelConnectionState.INCOMING) {
-            state = ChannelConnectionState.SIGNALLING
+            state =
+                ChannelConnectionState.SIGNALLING
             wsClient.send(msg)
         }
     }
@@ -145,7 +134,8 @@ class CallManager(
 
     private suspend fun handleAccepted(msg: AcceptedMsg) = withContext(dispatcher) {
         if (state == ChannelConnectionState.OUTGOING) {
-            state = ChannelConnectionState.SIGNALLING
+            state =
+                ChannelConnectionState.SIGNALLING
             launch { peerConnectionManager.call() }
         }
     }
@@ -209,25 +199,6 @@ class CallManager(
 
     private suspend fun handleClose() = withContext(dispatcher) {
         shutdown()
-    }
-
-    private fun audioCallback() = object : JavaAudioDeviceModule.AudioTrackProcessingCallback {
-        // TODO: should be taken from some configuration (changeable maybe?)
-        private val BUFFER_SIZE = 441  // number of samples
-        private var inBuffer: FloatArray = FloatArray(BUFFER_SIZE)
-        private var outBuffer: Array<FloatArray> = arrayOf(FloatArray(BUFFER_SIZE))
-
-        override fun onWebRtcAudioTrackProcess(p0: ByteBuffer?) {
-            if (p0 == null) return;
-
-            for (i in 0 until BUFFER_SIZE)
-                inBuffer[i] = p0.getShort(2 * i).toFloat()
-
-            tflite.run(inBuffer, outBuffer)
-
-            for (i in 0 until BUFFER_SIZE)
-                p0.putShort(2 * i, outBuffer[0][i].toShort())
-        }
     }
 
     private fun fsmError(called: String) {
