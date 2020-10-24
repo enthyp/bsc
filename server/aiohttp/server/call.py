@@ -47,8 +47,6 @@ class Server:
 
     async def on_token(self, identity, token):
         self.tokens[identity] = token  # TODO: DB
-        await self.storage.add_token(identity, token)
-        logging.info(f'Token saved for user {identity}')
 
     async def initiate_call(self, caller, callee):
         token = self.tokens.get(callee, None)
@@ -273,8 +271,7 @@ class ClientEndpoint:
         logging.info(f'Refused call pushed to: {self.nick}')
 
     async def send_msg(self, type, payload):
-        payload_json = json.dumps(payload)
-        ws_msg = json.dumps({'type': type, 'payload': payload_json})
+        ws_msg = json.dumps({'type': type, 'payload': payload})
         await self.socket.send_json(ws_msg)
 
 

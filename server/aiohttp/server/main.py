@@ -9,13 +9,58 @@ from aiohttp_security import (
     authorized_userid
 )
 
+import server.call as call
+import server.channels as channels
+from server.asr.webrtc import SpeechToTextEndpoint
 from server.auth import check_credentials, setup_auth
 from server.notifications import *
-from server.call import ClientEndpoint, setup_server
 from server.storage import setup_db
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 routes = web.RouteTableDef()
+
+
+@routes.get('/channels')
+async def websocket_handler(request):
+    await check_authorized(request)
+    login = await authorized_userid(request)
+
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+
+    logging.info(f'User {login} connecting to channels...')
+
+    manager = request.app['channel manager']
+    storage = request.app['storage']
+    # TODO: nick and token should be in place (login)
+    endpoint = channels.ClientEndpoint(nick=login, socket=ws, channel_manager=manager, storage=storage)
+
+    try:
+        async for msg in ws:
+            if msg.type == aiohttp.WSMsgType.TEXT:
+                msg_str = msg.json()
+                msg_obj = json.loads(msg_str)
+                msg_type = msg_obj['type']
+                payload = json.loads(msg_obj['payload'])
+                await endpoint.dispatch(msg_type, payload)
+
+            elif msg.type == aiohttp.WSMsgType.CLOSED:
+                logging.info('WebSocket connection closing...')
+                await ws.close()
+                break
+
+            elif msg.type == aiohttp.WSMsgType.ERROR:
+                logging.error('WebSocket connection closed with exception {}'.format(ws.exception()))
+                await ws.close()
+                break
+
+    except Exception as e:
+        # TODO: some global error handler? (CancelledError...)
+        logging.error((e, type(e)))
+    finally:
+        logging.info('Websocket connection closed')
+
+    return ws
 
 
 @routes.get('/')
@@ -27,7 +72,7 @@ async def websocket_handler(request):
 
     server = request.app['server']
     # TODO: nick and token should be in place (login)
-    endpoint = ClientEndpoint(socket=ws, server=server)
+    endpoint = call.ClientEndpoint(socket=ws, server=server)
 
     try:
         async for msg in ws:
@@ -63,8 +108,12 @@ async def token_handler(request):
     await check_authorized(request)
     login = await authorized_userid(request)
 
+    storage = request.app['storage']
+
     body = await request.json()
-    # TODO: DB only?
+    await storage.add_token(login, body['token'])
+    logging.info(f'Token saved for user {login}')
+
     await request.app['server'].on_token(login, body['token'])
 
     return web.Response()
@@ -172,6 +221,7 @@ async def handle_invitation_answer(request):
     return web.Response()
 
 
+# TODO: for multiple users? check if are friends!
 @routes.get('/users/status')
 async def handle_status_request(request):
     await check_authorized(request)
@@ -210,6 +260,11 @@ async def handle_logout(request):
     raise response
 
 
+server_endpoints = [
+    SpeechToTextEndpoint('sst-bot')
+]
+
+
 def main():
     parser = configparser.ConfigParser()
     parser.read('../config.ini')
@@ -219,7 +274,8 @@ def main():
     setup_db(app, parser)
     setup_notifications(parser)
     setup_auth(app)
-    setup_server(app)
+    call.setup_server(app)
+    channels.setup_server(app, server_endpoints)
 
     app.add_routes(routes)
     web.run_app(app, host='192.168.100.106', port=5000)

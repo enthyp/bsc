@@ -4,6 +4,10 @@ import re
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert
 
+########
+# TABLES
+########
+
 meta = sa.MetaData()
 users = sa.Table(
     'users', meta,
@@ -13,6 +17,12 @@ users = sa.Table(
     sa.Column('token', sa.String(4096), nullable=False),
 )
 
+create_user_table = ('CREATE TABLE IF NOT EXISTS users('
+                     'id SERIAL PRIMARY KEY, '
+                     'login VARCHAR (100) UNIQUE NOT NULL, '
+                     'password VARCHAR (100) NOT NULL, '
+                     'token VARCHAR (4096));')
+
 invitations = sa.Table(
     'invitations', meta,
     sa.Column('id', sa.Integer, primary_key=True),
@@ -21,6 +31,12 @@ invitations = sa.Table(
     sa.UniqueConstraint('from_user', 'to_user')
 )
 
+create_invitation_table = ('CREATE TABLE IF NOT EXISTS invitations('
+                           'id SERIAL PRIMARY KEY, '
+                           'from_user INTEGER REFERENCES users(id), '
+                           'to_user INTEGER REFERENCES users(id), '
+                           'UNIQUE (from_user, to_user));')
+
 friendships = sa.Table(
     'friendships', meta,
     sa.Column('id', sa.Integer, primary_key=True),
@@ -28,6 +44,12 @@ friendships = sa.Table(
     sa.Column('to_user', sa.Integer, sa.ForeignKey('users.id')),
     sa.UniqueConstraint('from_user', 'to_user')
 )
+
+create_friendship_table = ('CREATE TABLE IF NOT EXISTS friendships('
+                           'id SERIAL PRIMARY KEY, '
+                           'from_user INTEGER REFERENCES users(id), '
+                           'to_user INTEGER REFERENCES users(id), '
+                           'UNIQUE (from_user, to_user));')
 
 
 class UserStatus(enum.Enum):
@@ -43,7 +65,6 @@ create_user_status_type = ("DO $$ BEGIN "
                            "    WHEN duplicate_object THEN NULL; "
                            "END $$;")
 
-
 statuses = sa.Table(
     'statuses', meta,
     sa.Column('id', sa.Integer, primary_key=True),
@@ -52,30 +73,40 @@ statuses = sa.Table(
     sa.UniqueConstraint('user_id')
 )
 
-create_user_table = ('CREATE TABLE IF NOT EXISTS users('
-                     'id SERIAL PRIMARY KEY, '
-                     'login VARCHAR (100) UNIQUE NOT NULL, '
-                     'password VARCHAR (100) NOT NULL, '
-                     'token VARCHAR (4096));')
-
-create_invitation_table = ('CREATE TABLE IF NOT EXISTS invitations('
-                           'id SERIAL PRIMARY KEY, '
-                           'from_user INTEGER REFERENCES users(id), '
-                           'to_user INTEGER REFERENCES users(id), '
-                           'UNIQUE (from_user, to_user));')
-
-create_friendship_table = ('CREATE TABLE IF NOT EXISTS friendships('
-                           'id SERIAL PRIMARY KEY, '
-                           'from_user INTEGER REFERENCES users(id), '
-                           'to_user INTEGER REFERENCES users(id), '
-                           'UNIQUE (from_user, to_user));')
-
 create_status_table = ('CREATE TABLE IF NOT EXISTS statuses('
                        'id SERIAL PRIMARY KEY, '
                        'user_id INTEGER REFERENCES users(id), '
                        'status userstatus NOT NULL, '
                        'UNIQUE (user_id));')
 
+channels = sa.Table(
+    'channels', meta,
+    sa.Column('id', sa.Integer, primary_key=True),
+    sa.Column('name', sa.String(100), nullable=False)
+)
+
+create_channels_table = ('CREATE TABLE IF NOT EXISTS channels('
+                         'id SERIAL PRIMARY KEY, '
+                         'name VARCHAR (100) NOT NULL);')
+
+channel_memberships = sa.Table(
+    'channel_memberships', meta,
+    sa.Column('id', sa.Integer, primary_key=True),
+    sa.Column('user_id', sa.Integer, sa.ForeignKey('users.id')),
+    sa.Column('channel_id', sa.Integer, sa.ForeignKey('channels.id')),
+    sa.UniqueConstraint('user_id', 'channel_id')
+)
+
+create_channel_memberships_table = ('CREATE TABLE IF NOT EXISTS channel_memberships('
+                                    'id SERIAL PRIMARY KEY, '
+                                    'user_id INTEGER REFERENCES users(id), '
+                                    'channel_id INTEGER REFERENCES channels(id), '
+                                    'UNIQUE (user_id, channel_id));')
+
+
+#########
+# STORAGE
+#########
 
 class DBStorage:
     def __init__(self, db):
@@ -263,6 +294,21 @@ class DBStorage:
             res = await conn.execute(i_query)
             return (await res.fetchone())[0]
 
+    ###
+    # CHANNELS
+    ###
+    async def get_channel_members(self, channel_id):
+        async with self.db.acquire() as conn:
+            joined = users\
+                .join(channel_memberships, users.c.id == channel_memberships.c.user_id)\
+
+            s_query = sa.select([users.c.login]).where(channel_memberships.c.channel_id == channel_id)\
+                .select_from(joined)
+
+            res = await conn.execute(s_query)
+            members = await res.fetchall()
+            return {m[0] for m in members}
+
 
 async def get_engine(config):
     return await aiosa.create_engine(config.get('DATABASE', 'URL'))
@@ -277,13 +323,20 @@ def setup_db(app, config):
         engine = await get_engine(config)
         app['storage'] = DBStorage(engine)
 
-        # Create tables.
+        # Define tables and types.
+        prerequisites = [
+            create_user_table,
+            create_friendship_table,
+            create_invitation_table,
+            create_user_status_type,
+            create_status_table,
+            create_channels_table,
+            create_channel_memberships_table
+        ]
+
         async with engine.acquire() as conn:
-            await conn.execute(create_user_table)
-            await conn.execute(create_friendship_table)
-            await conn.execute(create_invitation_table)
-            await conn.execute(create_user_status_type)
-            await conn.execute(create_status_table)
+            for stmt in prerequisites:
+                await conn.execute(stmt)
 
     app.on_startup.append(_setup)
     app.on_cleanup.append(cleanup_storage)
