@@ -36,6 +36,13 @@ class MainActivity : AppCompatActivity() {
 
         setSupportActionBar(binding.mainToolbar)
 
+        binding.floatingActionButton.setOnClickListener {
+            val intent = Intent(this, ChannelActivity::class.java).apply {
+                putExtra(Constants.CHANNEL_ID_KEY, 1)
+            }
+            startActivity(intent)
+        }
+
         connect()
     }
 

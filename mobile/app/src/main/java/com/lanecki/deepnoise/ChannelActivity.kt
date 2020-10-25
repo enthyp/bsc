@@ -54,7 +54,6 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
     }
 
     private var state: State = State.INIT
-    private lateinit var nick: String
     private var channelId: String? = null
 
     private lateinit var leaveActionFab: FloatingActionButton
@@ -70,18 +69,14 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
         val sharedPreferences: SharedPreferences =
             PreferenceManager.getDefaultSharedPreferences(this)
 
-        val nickKey = resources.getString(R.string.settings_login)
         val serverAddressKey = resources.getString(R.string.settings_server_address)
-
-        nick = sharedPreferences.getString(nickKey, "") ?: ""
         val serverAddress = sharedPreferences.getString(serverAddressKey, "") ?: ""
 
         // TODO:
         //  - null channel ID
         //  - incorrect channel ID (no such channel)
         channelId = intent.getSerializableExtra(Constants.CHANNEL_ID_KEY) as String?
-
-        channelManager = ChannelManager(nick, serverAddress, this, application)
+        channelManager = ChannelManager(channelId!!, serverAddress, this, application)
 
         // Setup view
         leaveActionFab = binding.leave

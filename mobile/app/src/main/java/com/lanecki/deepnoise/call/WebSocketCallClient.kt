@@ -37,7 +37,7 @@ class WebSocketCallClient(
 ) : Actor<Message>(Dispatchers.IO) {
 
     companion object {
-        private const val TAG = "WSClient"
+        private const val TAG = "WSCallClient"
         private const val SERVER_ADDRESS = "http://192.168.100.106:5000"  // TODO: in Settings panel only
     }
 

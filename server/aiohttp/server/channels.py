@@ -85,10 +85,11 @@ class Channel:
                 self.route(ClientEndpoint.LEFT, {'who': endpoint.nick, 'to_user': p.nick}, '')
 
     def route(self, type, message, sender, user=True):
-        recipient = message.get('to_user', None)
+        recipient = message.get('toUser', None)
         endpoint = self.participants.get(recipient, None)
         if endpoint:
-            message['from_user'] = self.user_nick(sender) if user else sender  # TODO: del redundant message['to_user']?
+            del message['toUser']
+            message['fromUser'] = self.user_nick(sender) if user else sender
             endpoint.send_msg(type, message)
         else:
             logging.error(f'In channel {self.id}: recipient {recipient} absent')
@@ -159,7 +160,7 @@ class ClientEndpoint:
             logging.error(f'No handler found for {type} in state {self.state}')
 
     async def join(self, msg):
-        channel_id = msg['channel_id']
+        channel_id = msg['channelId']
         members = await self.storage.get_channel_members(channel_id)
 
         if self.nick not in members:
