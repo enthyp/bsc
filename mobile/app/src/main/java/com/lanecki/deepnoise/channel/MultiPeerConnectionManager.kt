@@ -13,8 +13,7 @@ import org.webrtc.voiceengine.WebRtcAudioUtils
 // TODO: to actor?
 class MultiPeerConnectionManager(
     private val listener: Actor<Message>,
-    private val context: Context,
-    private val audioSamplesCallback: JavaAudioDeviceModule.AudioTrackProcessingCallback?
+    private val context: Context
 ) : SignallingListener {
 
     enum class RTCState {
@@ -50,7 +49,6 @@ class MultiPeerConnectionManager(
 
         // Configure the PeerConnectionFactory builder.
         val audioDeviceModule = JavaAudioDeviceModule.builder(context)
-            .setAudioTrackProcessingCallback(audioSamplesCallback)
             .createAudioDeviceModule()
 
         return PeerConnectionFactory

@@ -10,9 +10,8 @@ sealed class Message
 
 // ChannelActivity
 
-class OutgoingCallMsg(val to: String) : Message()
-class IncomingCallMsg(val from: String, val callId: String) : Message()
-object CloseMsg : Message()
+class JoinMsg(val channelId: String) : Message()
+object LeaveMsg : Message()
 
 // WebSocket messages
 

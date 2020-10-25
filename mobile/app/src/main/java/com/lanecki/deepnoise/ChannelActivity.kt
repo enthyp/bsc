@@ -19,9 +19,10 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
 import com.google.android.material.floatingactionbutton.FloatingActionButton
-import com.lanecki.deepnoise.call.*
 import com.lanecki.deepnoise.channel.ChannelManager
-import com.lanecki.deepnoise.databinding.ActivityCallBinding
+import com.lanecki.deepnoise.channel.JoinMsg
+import com.lanecki.deepnoise.channel.LeaveMsg
+import com.lanecki.deepnoise.databinding.ActivityChannelBinding
 import com.lanecki.deepnoise.utils.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +37,6 @@ interface ChannelUI {
     //  onUserLeft(user: String)
 }
 
-
 // TODO: use some Android config instead of hardcoding!
 class ChannelActivity : AppCompatActivity(), ChannelUI,
     CoroutineScope by CoroutineScope(Dispatchers.Default) {
@@ -47,19 +47,23 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
         private const val AUDIO_PERMISSION = Manifest.permission.RECORD_AUDIO
     }
 
-    private lateinit var state: CallState
-    private lateinit var nick: String
-    private lateinit var callee: String
-    private var callId: String? = null
+    enum class State {
+        INIT,
+        SIGNALLING,
+        CLOSING
+    }
 
-    private lateinit var callActionFab: FloatingActionButton
-    private lateinit var hangupActionFab: FloatingActionButton
+    private var state: State = State.INIT
+    private lateinit var nick: String
+    private var channelId: String? = null
+
+    private lateinit var leaveActionFab: FloatingActionButton
 
     private lateinit var channelManager: ChannelManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val binding = ActivityCallBinding.inflate(layoutInflater)
+        val binding = ActivityChannelBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         // Initialize CallManager.
@@ -72,22 +76,16 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
         nick = sharedPreferences.getString(nickKey, "") ?: ""
         val serverAddress = sharedPreferences.getString(serverAddressKey, "") ?: ""
 
-        state = intent.getSerializableExtra(Constants.INITIAL_STATE_KEY) as CallState
-        callee = intent.getSerializableExtra(Constants.CALLEE_KEY) as String
-        callId = intent.getSerializableExtra(Constants.CALL_ID_KEY) as String?
+        // TODO:
+        //  - null channel ID
+        //  - incorrect channel ID (no such channel)
+        channelId = intent.getSerializableExtra(Constants.CHANNEL_ID_KEY) as String?
 
         channelManager = ChannelManager(nick, serverAddress, this, application)
 
         // Setup view
-        hangupActionFab = binding.hangup
-        hangupActionFab.setOnClickListener(hangupActionFabClickListener());
-        callActionFab = binding.call
-
-        if (state == CallState.INCOMING) {
-            callActionFab.setOnClickListener(callActionFabClickListener());
-        } else {
-            callActionFab.visibility = View.GONE
-        }
+        leaveActionFab = binding.leave
+        leaveActionFab.setOnClickListener(leaveActionFabClickListener());
 
         setupWindow()
         setupAudio()
@@ -95,35 +93,16 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
         checkAudioPermission()
     }
 
-    private fun callActionFabClickListener() = View.OnClickListener {
-        callActionFab.visibility = View.GONE
-        if (state == CallState.INCOMING) {
-            state = CallState.SIGNALLING
-            launch { channelManager.send(
-                AcceptMsg(
-                    nick,
-                    callee,
-                    callId!!
-                )
-            ) }
-        }
-    }
-
     // TODO: fix the states (some callbacks to change it + mutex)
-    private fun hangupActionFabClickListener() = View.OnClickListener {
+    private fun leaveActionFabClickListener() = View.OnClickListener {
         when (state) {
-            CallState.INCOMING -> launch { channelManager.send(
-                RefuseMsg(
-                    nick,
-                    callee,
-                    callId!!
-                )
-            ) }
-            CallState.OUTGOING -> launch { channelManager.send(HangupMsg) }
-            CallState.SIGNALLING -> launch { channelManager.send(HangupMsg) }
+            State.INIT, State.SIGNALLING -> launch { channelManager.send(LeaveMsg) }
+            else -> {
+                // TODO: Toast("Leaving already, calm down!")?
+            }
         }
 
-        state = CallState.CLOSED
+        state = State.CLOSING
         finish()
     }
 
@@ -159,7 +138,7 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
     }
 
     override fun onDestroy() {
-        launch { channelManager.send(CloseMsg) }
+        launch { channelManager.send(LeaveMsg) }
         super.onDestroy()
         Log.d(TAG, "Destroyed!")
     }
@@ -199,19 +178,11 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
 
     private fun onAudioPermissionGranted() {
         launch { channelManager.run() }
-        if (state == CallState.INCOMING) {
-            launch { channelManager.send(
-                IncomingCallMsg(
-                    callee,
-                    callId!!
-                )
-            ) }
-        } else {
-            launch { channelManager.send(
-                OutgoingCallMsg(
-                    callee
-                )
-            ) }
+        when (state) {
+            State.INIT, State.SIGNALLING -> launch {
+                channelManager.send(JoinMsg(channelId?: ""))
+            }
+            State.CLOSING -> Log.d(TAG, "Audio permission granted in state CLOSING.")
         }
     }
 

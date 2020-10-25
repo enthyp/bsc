@@ -4,6 +4,7 @@ object Constants {
     const val CALLEE_KEY = "CALLEE"
     const val INITIAL_STATE_KEY = "INITIAL_STATE"
     const val CALL_ID_KEY = "CALL_ID"
+    const val CHANNEL_ID_KEY = "CHANNEL_ID"
 
     const val ACTION_ACCEPT_INVITATION = "com.lanecki.deepnoise.invitation.accept"
     const val ACTION_REFUSE_INVITATION = "com.lanecki.deepnoise.invitation.refuse"

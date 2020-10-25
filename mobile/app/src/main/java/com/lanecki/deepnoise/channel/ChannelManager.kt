@@ -7,14 +7,6 @@ import com.lanecki.deepnoise.utils.*
 import kotlinx.coroutines.*
 
 
-enum class ChannelConnectionState {
-    INIT,
-    INCOMING,
-    OUTGOING,
-    SIGNALLING,
-    CLOSED
-}
-
 class ChannelManager(
     private val nickname: String,
     private val serverAddress: String,
@@ -26,25 +18,22 @@ class ChannelManager(
         private const val TAG = "ChannelManager"
     }
 
+    enum class State {
+        INIT,
+        SIGNALLING,
+        CLOSED
+    }
+
     private val lifecycle: AuxLifecycle = InjectionUtils.provideCallLifecycle()
     private val wsClient: WebSocketChannelClient
     private val peerConnectionManager: MultiPeerConnectionManager
 
-    private var state = ChannelConnectionState.INIT
+    private var state = State.INIT
 
     init {
         lifecycle.start()
-        wsClient = WebSocketChannelClient(
-            this,
-            serverAddress,
-            lifecycle
-        )
-        peerConnectionManager =
-            MultiPeerConnectionManager(
-                this@ChannelManager,
-                context,
-                null
-            )
+        wsClient = WebSocketChannelClient(this, serverAddress, lifecycle)
+        peerConnectionManager = MultiPeerConnectionManager(this@ChannelManager, context)
     }
 
     // Implement WSListener interface.
@@ -80,37 +69,37 @@ class ChannelManager(
     }
 
     private suspend fun handleOutgoingCall(msg: OutgoingCallMsg) = withContext(dispatcher) {
-        if (state == ChannelConnectionState.INIT) {
-            state = ChannelConnectionState.OUTGOING
+        if (state == State.INIT) {
+            state = State.OUTGOING
             wsClient.send(CallMsg(nickname, msg.to))
         }
     }
 
     private suspend fun handleIncomingCall(msg: IncomingCallMsg) = withContext(dispatcher) {
-        if (state == ChannelConnectionState.INIT) {
-            state = ChannelConnectionState.INCOMING
+        if (state == State.INIT) {
+            state = State.INCOMING
         }
     }
 
     private suspend fun handleHangup(msg: HangupMsg) = withContext(dispatcher) {
         when (state) {
-            ChannelConnectionState.OUTGOING -> { wsClient.send(
+            State.OUTGOING -> { wsClient.send(
                 CancelMsg
             ); shutdown() }
-            ChannelConnectionState.SIGNALLING -> { wsClient.send(msg); shutdown() }
+            State.SIGNALLING -> { wsClient.send(msg); shutdown() }
             else -> { /* TODO: ? */}
         }
     }
 
     private suspend fun handleCancelled(msg: CancelledMsg) = withContext(dispatcher) {
-        if (state == ChannelConnectionState.INCOMING || state == ChannelConnectionState.SIGNALLING) {
+        if (state == State.INCOMING || state == State.SIGNALLING) {
             shutdown()
             launch(Dispatchers.Main) { ui?.onCallCancelled() }
         }
     }
 
     private suspend fun handleHungUp(msg: HungUpMsg) = withContext(dispatcher) {
-        if (state == ChannelConnectionState.SIGNALLING) {
+        if (state == State.SIGNALLING) {
             wsClient.send(HangupMsg)
             shutdown()
             launch(Dispatchers.Main) { ui?.onCallHungUp(msg.from) }
@@ -118,30 +107,30 @@ class ChannelManager(
     }
 
     private suspend fun handleAccept(msg: AcceptMsg) = withContext(dispatcher) {
-        if (state == ChannelConnectionState.INCOMING) {
+        if (state == State.INCOMING) {
             state =
-                ChannelConnectionState.SIGNALLING
+                State.SIGNALLING
             wsClient.send(msg)
         }
     }
 
     private suspend fun handleRefuse(msg: RefuseMsg) = withContext(dispatcher) {
-        if (state == ChannelConnectionState.INCOMING) {
+        if (state == State.INCOMING) {
             wsClient.send(msg)
             shutdown()
         }
     }
 
     private suspend fun handleAccepted(msg: AcceptedMsg) = withContext(dispatcher) {
-        if (state == ChannelConnectionState.OUTGOING) {
+        if (state == State.OUTGOING) {
             state =
-                ChannelConnectionState.SIGNALLING
+                State.SIGNALLING
             launch { peerConnectionManager.call() }
         }
     }
 
     private suspend fun handleRefused(msg: RefusedMsg) = withContext(dispatcher) {
-        if (state == ChannelConnectionState.OUTGOING) {
+        if (state == State.OUTGOING) {
             shutdown()
             launch(Dispatchers.Main) { ui?.onCallRefused() }
         }
@@ -158,7 +147,7 @@ class ChannelManager(
     }
 
     private suspend fun handleOffer(msg: OfferMsg, out: Boolean) = withContext(dispatcher) {
-        if (state == ChannelConnectionState.SIGNALLING) {
+        if (state == State.SIGNALLING) {
             if (out) {
                 wsClient.send(msg)
             } else {
@@ -170,7 +159,7 @@ class ChannelManager(
     }
 
     private suspend fun handleAnswer(msg: AnswerMsg, out: Boolean) = withContext(dispatcher) {
-        if (state == ChannelConnectionState.SIGNALLING) {
+        if (state == State.SIGNALLING) {
             if (out) {
                 wsClient.send(msg)
             } else {
@@ -182,7 +171,7 @@ class ChannelManager(
     }
 
     private suspend fun handleIce(msg: IceCandidateMsg, out: Boolean) = withContext(dispatcher) {
-        if (state == ChannelConnectionState.SIGNALLING) {
+        if (state == State.SIGNALLING) {
             if (out) {
                 wsClient.send(msg)
             } else {
@@ -207,8 +196,8 @@ class ChannelManager(
 
     // TODO: cancellation?
     private suspend fun shutdown() = withContext(Dispatchers.Default) {
-        if (state != ChannelConnectionState.CLOSED) {
-            state = ChannelConnectionState.CLOSED
+        if (state != State.CLOSED) {
+            state = State.CLOSED
             wsClient.send(CloseMsg)  // TODO: wait for it
             peerConnectionManager.close()
             Log.d(TAG, "shutdown in $state")

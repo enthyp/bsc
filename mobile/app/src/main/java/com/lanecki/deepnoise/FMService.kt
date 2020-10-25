@@ -11,7 +11,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.work.*
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.lanecki.deepnoise.channel.ChannelConnectionState
+import com.lanecki.deepnoise.call.CallState
 import com.lanecki.deepnoise.receivers.InvitationReceiver
 import com.lanecki.deepnoise.workers.AddFriendWorker
 import com.lanecki.deepnoise.workers.UpdateFCMTokenWorker
@@ -54,7 +54,7 @@ class FMService : FirebaseMessagingService() {
         val intent = Intent(this, CallActivity::class.java).apply {
             putExtra(Constants.CALLEE_KEY, caller)
             putExtra(Constants.CALL_ID_KEY, callId)
-            putExtra(Constants.INITIAL_STATE_KEY, ChannelConnectionState.INCOMING)
+            putExtra(Constants.INITIAL_STATE_KEY, CallState.INCOMING)
         }
         val pendingIntent = PendingIntent.getActivity(
             this, 0, intent,
