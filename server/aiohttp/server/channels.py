@@ -86,7 +86,7 @@ class Channel:
             self.manager.on_channel_empty(self.id)
         else:
             for p in self.participants:
-                self.route(ClientEndpoint.LEFT, {'who': endpoint.nick, 'toUser': p.nick}, '')
+                asyncio.create_task(self.route(ClientEndpoint.LEFT, {'who': endpoint.nick, 'toUser': p}, ''))
 
     async def route(self, type, message, sender, user=True):
         recipient = message.get('toUser', None)
@@ -189,19 +189,16 @@ class ClientEndpoint:
         # TODO: garbage collected or not?
 
     async def offer(self, msg):
+        logging.info(f'Offer published by {self.nick}: to {msg["toUser"]}')
         await self.channel.route(ClientEndpoint.OFFER, msg, self.nick)
-        # TODO: no need to print it
-        from pprint import pprint
-        pprint(msg)
-        logging.info(f'Offer published by {self.nick}: {msg}')
 
     async def answer(self, msg):
+        logging.info(f'Answer published by {self.nick} to {msg["toUser"]}')
         await self.channel.route(ClientEndpoint.ANSWER, msg, self.nick)
-        logging.info(f'Answer published by {self.nick}: {msg}')
 
     async def ice(self, msg):
+        logging.info(f'ICE candidate published by {self.nick} to {msg["toUser"]}')
         await self.channel.route(ClientEndpoint.ICE, msg, self.nick)
-        logging.info(f'ICE candidate published by {self.nick}: {msg}')
 
     async def send_msg(self, type, payload):
         ws_msg = json.dumps({'type': type, 'payload': json.dumps(payload)})
