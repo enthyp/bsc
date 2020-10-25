@@ -2,6 +2,7 @@ package com.lanecki.deepnoise.channel
 
 import android.util.Log
 import com.google.gson.Gson
+import com.lanecki.deepnoise.api.BackendService
 import com.lanecki.deepnoise.api.WSApi
 import com.lanecki.deepnoise.utils.Actor
 import com.lanecki.deepnoise.utils.AuxLifecycle
@@ -22,13 +23,11 @@ import java.util.concurrent.TimeUnit
 // TODO: handle exceptions (failed to connect, ...)
 class WebSocketChannelClient(
     private val listener: Actor<Message>,
-    private val serverAddress: String,
     private val lifecycle: AuxLifecycle
 ) : Actor<Message>(Dispatchers.IO) {
 
     companion object {
         private const val TAG = "WSChannelClient"
-        private const val SERVER_ADDRESS = "http://192.168.100.106:5000"  // TODO: in Settings panel only
     }
 
     enum class State {
@@ -39,38 +38,19 @@ class WebSocketChannelClient(
         CLOSED
     }
     
-    private val backoffStrategy = ExponentialWithJitterBackoffStrategy(5000, 5000)
     private val gson = Gson()
-    private val httpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .writeTimeout(10, TimeUnit.SECONDS)
-        .build()
-
-    private val socket: WSApi
-    private val receiveSignalChannel: ReceiveChannel<String>
-    private val wsEventChannel: ReceiveChannel<WebSocket.Event>
+    private lateinit var socket: WSApi
+    private lateinit var receiveSignalChannel: ReceiveChannel<String>
+    private lateinit var wsEventChannel: ReceiveChannel<WebSocket.Event>
 
     private val initConnected = CompletableDeferred<Unit>()
     private var state = State.INIT
 
-    init {
-        val address = if (serverAddress != "") serverAddress else SERVER_ADDRESS
-
-        socket = Scarlet.Builder()
-            .webSocketFactory(httpClient.newWebSocketFactory(address))
-            .addMessageAdapterFactory(GsonMessageAdapter.Factory())
-            .addStreamAdapterFactory(CoroutinesStreamAdapterFactory())
-            .backoffStrategy(backoffStrategy)
-            .lifecycle(lifecycle)
-            .build()
-            .create()
-
+    suspend fun run() = withContext(dispatcher) {
+        socket = BackendService.getWSInstance()
         wsEventChannel = socket.receiveWebSocketEvent()
         receiveSignalChannel = socket.receiveSignal()
-    }
 
-    suspend fun run() = withContext(dispatcher) {
         launch { receiveWSEvent() }
         initConnected.await()
 

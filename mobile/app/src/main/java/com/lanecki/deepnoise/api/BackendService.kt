@@ -13,6 +13,11 @@ import com.lanecki.deepnoise.api.model.Token
 import com.lanecki.deepnoise.model.User
 import com.lanecki.deepnoise.utils.InjectionUtils
 import com.lanecki.deepnoise.workers.UpdateFCMTokenWorker
+import com.tinder.scarlet.Scarlet
+import com.tinder.scarlet.messageadapter.gson.GsonMessageAdapter
+import com.tinder.scarlet.retry.ExponentialWithJitterBackoffStrategy
+import com.tinder.scarlet.websocket.okhttp.newWebSocketFactory
+import com.tinder.streamadapter.coroutines.CoroutinesStreamAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import okhttp3.JavaNetCookieJar
 import okhttp3.OkHttpClient
@@ -102,8 +107,15 @@ class BackendService(
     companion object {
         private const val TAG = "BackendService";
         private const val URL = "192.168.100.106:5000"
+
+        @Volatile
+        private var httpClient: OkHttpClient? = null
+
         @Volatile
         private var backendServiceInstance: BackendService? = null
+
+        @Volatile
+        private var wsApiInstance: WSApi? = null
 
         fun getInstance(): BackendService {
             return backendServiceInstance ?: synchronized(this) {
@@ -118,7 +130,7 @@ class BackendService(
             interceptor.setLevel(HttpLoggingInterceptor.Level.BODY)
             val cookieHandler: CookieHandler = CookieManager()
 
-            val httpClient = OkHttpClient.Builder().addNetworkInterceptor(interceptor)
+            httpClient = OkHttpClient.Builder().addNetworkInterceptor(interceptor)
                 .cookieJar(JavaNetCookieJar(cookieHandler))
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .writeTimeout(10, TimeUnit.SECONDS)
@@ -127,13 +139,34 @@ class BackendService(
 
             val apiClient = Retrofit.Builder()
                 .baseUrl("http://${URL}/")
-                .client(httpClient)
+                .client(httpClient!!)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(BackendApi::class.java)
 
             val responseHandler = InjectionUtils.provideResponseHandler()
             return BackendService(apiClient, responseHandler)
+        }
+
+        // TODO: quite ugly
+        fun getWSInstance(): WSApi {
+            return wsApiInstance ?: synchronized(this) {
+                wsApiInstance ?: buildWSApiInstance().also {
+                    wsApiInstance = it
+                }
+            }
+        }
+
+        private fun buildWSApiInstance(): WSApi {
+            val backoffStrategy = ExponentialWithJitterBackoffStrategy(5000, 5000)
+
+            return Scarlet.Builder()
+                .webSocketFactory(httpClient!!.newWebSocketFactory("http://${URL}/channels")) // TODO: wss?
+                .addMessageAdapterFactory(GsonMessageAdapter.Factory())
+                .addStreamAdapterFactory(CoroutinesStreamAdapterFactory())
+                .backoffStrategy(backoffStrategy)
+                .build()
+                .create(WSApi::class.java)
         }
     }
 }

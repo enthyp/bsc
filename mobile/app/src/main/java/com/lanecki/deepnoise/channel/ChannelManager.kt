@@ -11,7 +11,6 @@ import kotlinx.coroutines.*
 
 class ChannelManager(
     private val channelId: String,
-    private val serverAddress: String,
     private var ui: ChannelUI?,
     private val context: Context
 ) : Actor<Message>(Dispatchers.Default) {
@@ -34,7 +33,7 @@ class ChannelManager(
 
     init {
         lifecycle.start()
-        wsClient = WebSocketChannelClient(this, serverAddress, lifecycle)
+        wsClient = WebSocketChannelClient(this, lifecycle)
         peerConnectionManager = MultiPeerConnectionManager(this@ChannelManager, context)
     }
 

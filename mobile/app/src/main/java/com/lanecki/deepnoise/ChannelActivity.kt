@@ -17,13 +17,10 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.preference.PreferenceManager
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.lanecki.deepnoise.channel.ChannelManager
-import com.lanecki.deepnoise.channel.JoinMsg
 import com.lanecki.deepnoise.channel.LeaveMsg
 import com.lanecki.deepnoise.databinding.ActivityChannelBinding
-import com.lanecki.deepnoise.utils.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -66,17 +63,18 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
         setContentView(binding.root)
 
         // Initialize CallManager.
-        val sharedPreferences: SharedPreferences =
-            PreferenceManager.getDefaultSharedPreferences(this)
-
-        val serverAddressKey = resources.getString(R.string.settings_server_address)
-        val serverAddress = sharedPreferences.getString(serverAddressKey, "") ?: ""
+        // TODO: move it to BackendService
+//        val sharedPreferences: SharedPreferences =
+//            PreferenceManager.getDefaultSharedPreferences(this)
+//
+//        val serverAddressKey = resources.getString(R.string.settings_server_address)
+//        val serverAddress = sharedPreferences.getString(serverAddressKey, "") ?: ""
 
         // TODO:
         //  - null channel ID
         //  - incorrect channel ID (no such channel)
         channelId = intent.getSerializableExtra(Constants.CHANNEL_ID_KEY) as String?
-        channelManager = ChannelManager(channelId!!, serverAddress, this, application)
+        channelManager = ChannelManager(channelId!!, this, application)
 
         // Setup view
         leaveActionFab = binding.leave
@@ -173,12 +171,6 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
 
     private fun onAudioPermissionGranted() {
         launch { channelManager.run() }
-        when (state) {
-            State.INIT, State.SIGNALLING -> launch {
-                channelManager.send(JoinMsg(channelId?: ""))
-            }
-            State.CLOSING -> Log.d(TAG, "Audio permission granted in state CLOSING.")
-        }
     }
 
     private fun showPermissionRationaleDialog() {
