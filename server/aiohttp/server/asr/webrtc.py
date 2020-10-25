@@ -1,3 +1,4 @@
+import logging
 from aiortc import MediaStreamTrack
 
 from server.channels import ServerEndpoint
@@ -10,7 +11,7 @@ class SpeechToTextAudioTrack(MediaStreamTrack):
 
 
 class SpeechToTextEndpoint(ServerEndpoint):
-    def send_msg(self, type, message):
+    async def send_msg(self, type, message):
         # TODO
         # TODO: CPU bound stuff must be moved to a separate process
-        pass
+        logging.info(f'SST server endpoint: {type}:{message}')

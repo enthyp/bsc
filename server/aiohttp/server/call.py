@@ -271,7 +271,7 @@ class ClientEndpoint:
         logging.info(f'Refused call pushed to: {self.nick}')
 
     async def send_msg(self, type, payload):
-        ws_msg = json.dumps({'type': type, 'payload': payload})
+        ws_msg = json.dumps({'type': type, 'payload': json.dumps(payload)})
         await self.socket.send_json(ws_msg)
 
 

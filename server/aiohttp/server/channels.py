@@ -1,6 +1,7 @@
-from abc import ABC
+import asyncio
 import json
 import logging
+from abc import ABC
 from typing import Optional
 
 from server.storage import DBStorage
@@ -28,13 +29,14 @@ class ChannelManager:
         self.server_endpoints = server_endpoints
         self.channels = {}
 
-    def join(self, endpoint, channel_id):
+    def get_channel(self, channel_id):
         channel = self.channels.get(channel_id, None)
 
         if not channel:
             channel = Channel(channel_id, self, self.server_endpoints)
             self.channels[channel_id] = channel
-        channel.join(endpoint)
+
+        return channel
 
     def on_channel_empty(self, channel_id):
         del self.channels[channel_id]
@@ -70,8 +72,10 @@ class Channel:
         return list(self.participants.keys())
 
     def join(self, endpoint):
+        endpoint.channel = self
+
         for p in self.participants:
-            self.route(ClientEndpoint.JOINED, {'who': endpoint.nick, 'to_user': p.nick}, '')
+            asyncio.create_task(self.route(ClientEndpoint.JOINED, {'who': endpoint.nick, 'toUser': p}, '', user=False))
         self.participants[self.user_nick(endpoint.nick)] = endpoint
 
     def leave(self, endpoint):
@@ -82,15 +86,15 @@ class Channel:
             self.manager.on_channel_empty(self.id)
         else:
             for p in self.participants:
-                self.route(ClientEndpoint.LEFT, {'who': endpoint.nick, 'to_user': p.nick}, '')
+                self.route(ClientEndpoint.LEFT, {'who': endpoint.nick, 'toUser': p.nick}, '')
 
-    def route(self, type, message, sender, user=True):
+    async def route(self, type, message, sender, user=True):
         recipient = message.get('toUser', None)
         endpoint = self.participants.get(recipient, None)
         if endpoint:
             del message['toUser']
             message['fromUser'] = self.user_nick(sender) if user else sender
-            endpoint.send_msg(type, message)
+            await endpoint.send_msg(type, message)
         else:
             logging.error(f'In channel {self.id}: recipient {recipient} absent')
 
@@ -109,7 +113,7 @@ class ServerEndpoint(ABC):
     def route_msg(self, type, message):
         self.channel.route(type, message, self.nick, user=False)
 
-    def send_msg(self, type, message):
+    async def send_msg(self, type, message):
         raise NotImplementedError
 
 
@@ -161,19 +165,23 @@ class ClientEndpoint:
 
     async def join(self, msg):
         channel_id = msg['channelId']
+        logging.info(f'Attempt to join channel {channel_id} by user {self.nick}.')
+
         members = await self.storage.get_channel_members(channel_id)
 
         if self.nick not in members:
-            # TODO: drop connection actually
-            await self.send_msg(ClientEndpoint.REFUSED, {})
-            logging.warning(f'Unauthorized attempt to join channel {channel_id} by user {self.nick}')
+            await self.send_msg(ClientEndpoint.REFUSED, {})  # TODO: drop connection actually
+            logging.warning(f'Unauthorized!')
             return
 
-        self.channel_manager.join(self, channel_id)
+        channel = self.channel_manager.get_channel(channel_id)
+        online_users = channel.online_users
+        channel.join(self)
+
         self.state = ClientEndpoint.ONLINE
         logging.info(f'User {self.nick} joined channel {channel_id}')
 
-        await self.send_msg(ClientEndpoint.ACCEPTED, {'online': self.channel.online_users})
+        await self.send_msg(ClientEndpoint.ACCEPTED, {'usersOnline': online_users})
 
     async def leave(self, msg):
         self.channel.leave(self)
@@ -196,7 +204,7 @@ class ClientEndpoint:
         logging.info(f'ICE candidate published by {self.nick}: {msg}')
 
     async def send_msg(self, type, payload):
-        ws_msg = json.dumps({'type': type, 'payload': payload})
+        ws_msg = json.dumps({'type': type, 'payload': json.dumps(payload)})
         await self.socket.send_json(ws_msg)
 
 
