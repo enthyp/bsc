@@ -88,13 +88,6 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
 
     // TODO: fix the states (some callbacks to change it + mutex)
     private fun leaveActionFabClickListener() = View.OnClickListener {
-        when (state) {
-            State.INIT, State.SIGNALLING -> launch { channelManager.send(LeaveMsg) }
-            else -> {
-                // TODO: Toast("Leaving already, calm down!")?
-            }
-        }
-
         state = State.CLOSING
         finish()
     }
@@ -148,8 +141,6 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             requestAudioPermission()
-        } else {
-            onAudioPermissionGranted()
         }
     }
 
@@ -169,7 +160,8 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
         }
     }
 
-    private fun onAudioPermissionGranted() {
+    override fun onResume() {
+        super.onResume()
         launch { channelManager.run() }
     }
 
@@ -194,9 +186,7 @@ class ChannelActivity : AppCompatActivity(), ChannelUI,
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == AUDIO_PERMISSION_REQUEST_CODE && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-            onAudioPermissionGranted()
-        } else {
+        if (requestCode != AUDIO_PERMISSION_REQUEST_CODE || grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
             onAudioPermissionDenied()
         }
     }

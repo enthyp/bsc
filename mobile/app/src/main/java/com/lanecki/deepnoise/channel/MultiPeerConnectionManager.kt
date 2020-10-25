@@ -65,7 +65,7 @@ class MultiPeerConnectionManager(
             override fun onIceCandidate(p0: IceCandidate?) {
                 super.onIceCandidate(p0)
                 p0?.let { coroutineScope.launch { listener.send(
-                    ReceivedIceCandidateMsg(user, p0)
+                    SentIceCandidateMsg(user, p0)
                 ) } }
                 Log.d(TAG, "ICE candidate $p0 from PeerConnection of $user")
             }
@@ -150,7 +150,7 @@ class MultiPeerConnectionManager(
             peerConnections[sender] = buildPeerConnection(sender, coroutineScope!!)?.apply { this.setupAudio() }
 
         peerConnections[sender]?.setRemoteDescriptionSuspend(sessionDescription)
-        Log.d(TAG, "Remote set successfully")
+        Log.d(TAG, "Remote set successfully for $sender")
 
         val answer = peerConnections[sender]?.createAnswerSuspend(audioConstraints)
         peerConnections[sender]?.setLocalDescriptionSuspend(answer)

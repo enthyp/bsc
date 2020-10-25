@@ -39,6 +39,7 @@ class ChannelManager(
 
     // Implement WSListener interface.
     suspend fun run() = withContext(dispatcher) {
+        Log.d(TAG, "Run called")
         launch { wsClient.run() }
         peerConnectionManager.init(this)
 
@@ -117,7 +118,7 @@ class ChannelManager(
     }
     
     private suspend fun handleConnectionClosed(msg: ConnectionClosedMsg) = withContext(dispatcher) {
-        shutdown()
+        Log.d(TAG, "Closed WebRTC connection: $msg")
     }
 
     private suspend fun handleLeave() = withContext(dispatcher) {

@@ -11,6 +11,7 @@ import com.lanecki.deepnoise.api.model.Credentials
 import com.lanecki.deepnoise.api.model.InvitationAnswer
 import com.lanecki.deepnoise.api.model.Token
 import com.lanecki.deepnoise.model.User
+import com.lanecki.deepnoise.utils.AuxLifecycle
 import com.lanecki.deepnoise.utils.InjectionUtils
 import com.lanecki.deepnoise.workers.UpdateFCMTokenWorker
 import com.tinder.scarlet.Scarlet
@@ -114,9 +115,6 @@ class BackendService(
         @Volatile
         private var backendServiceInstance: BackendService? = null
 
-        @Volatile
-        private var wsApiInstance: WSApi? = null
-
         fun getInstance(): BackendService {
             return backendServiceInstance ?: synchronized(this) {
                 backendServiceInstance ?: buildBackendService().also {
@@ -149,15 +147,7 @@ class BackendService(
         }
 
         // TODO: quite ugly
-        fun getWSInstance(): WSApi {
-            return wsApiInstance ?: synchronized(this) {
-                wsApiInstance ?: buildWSApiInstance().also {
-                    wsApiInstance = it
-                }
-            }
-        }
-
-        private fun buildWSApiInstance(): WSApi {
+        fun getWSInstance(lifecycle: AuxLifecycle): WSApi {
             val backoffStrategy = ExponentialWithJitterBackoffStrategy(5000, 5000)
 
             return Scarlet.Builder()
@@ -165,6 +155,7 @@ class BackendService(
                 .addMessageAdapterFactory(GsonMessageAdapter.Factory())
                 .addStreamAdapterFactory(CoroutinesStreamAdapterFactory())
                 .backoffStrategy(backoffStrategy)
+                .lifecycle(lifecycle)
                 .build()
                 .create(WSApi::class.java)
         }

@@ -47,7 +47,7 @@ class WebSocketChannelClient(
     private var state = State.INIT
 
     suspend fun run() = withContext(dispatcher) {
-        socket = BackendService.getWSInstance()
+        socket = BackendService.getWSInstance(lifecycle)
         wsEventChannel = socket.receiveWebSocketEvent()
         receiveSignalChannel = socket.receiveSignal()
 
@@ -62,7 +62,7 @@ class WebSocketChannelClient(
                 is ConnectedMsg -> handleConnected()
                 is JoinRequestMsg -> handleJoinRequest(msg)
                 is AcceptedMsg -> handleAccepted(msg)
-                
+                // TODO: handle refused!
                 is ReceivedOfferMsg -> handleReceivedOffer(msg)
                 is ReceivedAnswerMsg -> handleReceivedAnswer(msg)
                 is ReceivedIceCandidateMsg -> handleReceivedIce(msg)
@@ -166,6 +166,7 @@ class WebSocketChannelClient(
         if (state == State.SIGNALLING) {
             state = State.CLOSING
             sendToServer(MessageType.LEAVE, Unit)
+            lifecycle.stop()
         }
     }
 
@@ -204,6 +205,7 @@ class WebSocketChannelClient(
         // TODO: what else??
     }
 
+    // TODO: not used at all
     private suspend fun handleClose() {
         if (state == State.SIGNALLING || state == State.CLOSING) {
             state = State.CLOSED
@@ -236,6 +238,7 @@ class WebSocketChannelClient(
 enum class MessageType {
     JOIN,
     ACCEPTED,
+    REFUSED,
     OFFER,
     ANSWER,
     ICE_CANDIDATE,
